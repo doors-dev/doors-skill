@@ -4,7 +4,7 @@ description: Use when creating, editing, reviewing, debugging, or extending appl
 license: Apache-2.0
 compatibility: codex, claude-code, opencode
 metadata:
-  version: "1.0.0"
+  version: "0.1.0"
   language: go
 ---
 

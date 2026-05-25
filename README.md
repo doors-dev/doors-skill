@@ -1,6 +1,6 @@
-# Doors Agent Skill
+# Doors Skill
 
-Agent skill/plugin for developing Go applications with Doors.
+Agent skill/plugin for building server-side interactive web applications with Doors, a Go UI framework with reactive state, typed routing, and GoX templates.
 
 ## Claude Code
 

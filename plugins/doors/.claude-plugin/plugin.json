@@ -1,8 +1,8 @@
 {
   "name": "doors",
   "displayName": "Doors",
-  "version": "1.0.0",
-  "description": "Agent support for developing Go applications with Doors.",
+  "version": "0.1.0",
+  "description": "Skill for building server-side interactive web applications with Doors, a Go UI framework with reactive state, typed routing, and GoX templates.",
   "author": {
     "name": "Doors Dev"
   },

@@ -7,8 +7,8 @@
     {
       "name": "doors",
       "source": "./plugins/doors",
-      "description": "Agent support for developing Go applications with Doors.",
-      "version": "1.0.0",
+      "description": "Skill for building server-side interactive web applications with Doors, a Go UI framework with reactive state, typed routing, and GoX templates.",
+      "version": "0.1.0",
       "author": {
         "name": "Doors Dev"
       }

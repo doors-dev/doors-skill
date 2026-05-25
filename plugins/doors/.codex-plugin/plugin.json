@@ -1,24 +1,24 @@
 {
   "name": "doors",
-  "version": "1.0.0",
-  "description": "Agent support for developing Go applications with Doors.",
+  "version": "0.1.0",
+  "description": "Skill for building server-side interactive web applications with Doors, a Go UI framework with reactive state, typed routing, and GoX templates.",
   "author": {
     "name": "Doors Dev"
   },
   "repository": "https://github.com/doors-dev/doors-skill",
   "license": "Apache-2.0",
-  "keywords": ["go", "doors", "framework", "agent-skill"],
+  "keywords": ["go", "doors", "server-driven", "ui-framework", "reactive", "agent-skill"],
   "skills": "./skills/",
   "interface": {
     "displayName": "Doors",
-    "shortDescription": "Go framework development support",
-    "longDescription": "Helps coding agents build, test, review, and maintain Go applications that use Doors.",
+    "shortDescription": "Go server-side UI framework",
+    "longDescription": "Helps coding agents build, review, and maintain Doors applications. Covers reactive state (Source/Beam), typed routing, GoX templates, components, events, navigation, styling, auth, sessions, and background data.",
     "developerName": "Doors Dev",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
     "defaultPrompt": [
       "Use Doors conventions to implement this feature.",
-      "Review this Doors project for routing, middleware, and testing issues."
+      "Review this Doors project for routing, state management, and component patterns."
     ]
   }
 }
