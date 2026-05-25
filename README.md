@@ -49,11 +49,17 @@ Install the skill directly:
 This copies the skill to:
 
 ```text
-~/.config/opencode/skills/doors/
+~/.config/opencode/skills/
 ```
 
 ## Manual portable install
 
 ```bash
 ./install.sh all
+```
+
+On Windows without Git Bash, see PowerShell commands:
+
+```bash
+./install.sh powershell
 ```

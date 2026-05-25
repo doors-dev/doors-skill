@@ -30,8 +30,19 @@ case "${1:-all}" in
     install_skill "$HOME/.agents/skills"
     install_skill "$HOME/.claude/skills"
     ;;
+  powershell)
+    src_win="$(cd "$SRC" && pwd -W 2>/dev/null)" || {
+      printf '%s\n' "This command must be run from Git Bash (MSYS2/MinGW) on Windows." >&2
+      exit 1
+    }
+    printf '\n%s\n\n' "Run the following in PowerShell:"
+    printf '  Copy-Item -Recurse '\''%s'\'' "$env:USERPROFILE\\.config\\opencode\\skills\\%s"\n' "$src_win" "$SKILL_NAME"
+    printf '  Copy-Item -Recurse '\''%s'\'' "$env:USERPROFILE\\.agents\\skills\\%s"\n' "$src_win" "$SKILL_NAME"
+    printf '  Copy-Item -Recurse '\''%s'\'' "$env:USERPROFILE\\.claude\\skills\\%s"\n' "$src_win" "$SKILL_NAME"
+    printf '\n'
+    ;;
   *)
-    echo "usage: $0 [opencode|codex-skill|claude-skill|all]"
+    echo "usage: $0 [opencode|codex-skill|claude-skill|all|powershell]"
     exit 1
     ;;
 esac
