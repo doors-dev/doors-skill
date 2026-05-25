@@ -1,0 +1,315 @@
+{
+  "version": "0.1.2",
+  "skill": "doors",
+  "cases": [
+    {
+      "id": "debounced-search-input",
+      "prompt": "In this Doors app, add a debounced search input that updates results as the user types without sending every keystroke.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/09-events.md",
+        "references/11-scopes.md",
+        "references/12-indication.md",
+        "references/06-state.md"
+      ],
+      "grading_assertions": [
+        "Uses AInput or another appropriate Doors event attr rather than browser-only JavaScript for the core state update.",
+        "Uses ScopeDebounce, optionally combined with ScopeLatest, to control request scheduling.",
+        "Stores the search query in a Source or updates a Door explicitly; does not assume a virtual DOM re-render.",
+        "Uses the handler ctx for Source updates and returns the correct handler continuation boolean."
+      ]
+    },
+    {
+      "id": "reactive-counter-source",
+      "prompt": "Add a reactive counter component to a Doors page using Source so only the displayed count updates when the button is clicked.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/06-state.md",
+        "references/08-components.md",
+        "references/09-events.md"
+      ],
+      "grading_assertions": [
+        "Creates or reuses doors.Source[int] for the count.",
+        "Renders the displayed count through Bind or Effect instead of relying on full component re-rendering.",
+        "Updates the Source from the click handler using the handler context.",
+        "Keeps component state ownership consistent with the existing project style.",
+        "Audits existing reactive state usage and preserves or improves narrow ownership/bind boundaries instead of introducing broad rerenders."
+      ]
+    },
+    {
+      "id": "typed-route-query",
+      "prompt": "Add a /reports route with an optional page query parameter and active navigation link in a Doors app.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/05-routing.md",
+        "references/10-navigation.md",
+        "references/12-indication.md"
+      ],
+      "grading_assertions": [
+        "Extends or reuses the existing typed path model instead of inventing an unrelated router.",
+        "Represents the optional query parameter with the path model conventions documented by the skill.",
+        "Uses doors.Route or related Route primitives in the rendered component tree.",
+        "Uses ALink with Active configuration for current-page styling.",
+        "Communicates and follows the Doors routing ladder: top-level RouteModel/path switch, narrower Route primitives for branches, then params/query binds only where consumed.",
+        "Distinguishes Route from Bind/Effect: Route keeps the branch while the match outcome stays the same; Bind/Effect rerender on subscribed value changes.",
+        "Does not bind the whole path model at the page shell merely to branch on the section; uses Route primitives for the minimal page switch and handles path-derived data down-tree."
+      ]
+    },
+    {
+      "id": "route-granularity-ladder",
+      "prompt": "Refactor a Doors app whose top-level Path has Section plus detail ID, query, page, and filter fields. Keep the route model as one source of truth, but make the route hierarchy follow Doors' ladder: top-level path-model switch, narrower path-model branches, then params/query updates only in fragments that read them.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/05-routing.md",
+        "references/06-state.md",
+        "references/08-components.md"
+      ],
+      "grading_assertions": [
+        "Keeps one typed Path source of truth while routing or deriving smaller values for branches, params, query, page, and filters.",
+        "Uses doors.Route/RouteModel for URL model selection and path.Route with RouteMatch, RouteDerive, RouteValue, or RouteDefault* for route dispatch instead of path.Bind.",
+        "Explains or implements that Route dispatch keeps the active branch while the active match stays the same, while Bind/Effect need derived state to stay targeted.",
+        "Does not render a Page(path Source[Path]) pattern that binds the whole Path and branches only on p.Section.",
+        "Keeps the top-level route switch minimal: it chooses the active page/segment, or handles truly global effects, and does not bind query, page, or filter fields there.",
+        "Uses RouteDerive, RouteMatch.Comp, or RouteDefaultComp when a branch only needs a smaller value or no routed value, rather than passing the full path by habit.",
+        "Ensures query, page, or filter changes within a section do not remount or rerender the entire page shell.",
+        "Binds or effects narrower path-derived values inside the active page fragments that actually depend on those values."
+      ]
+    },
+    {
+      "id": "reactive-state-granularity-ladder",
+      "prompt": "Refactor a dashboard Source[DashboardState] with selected tab, filters, counters, and detail data so changing a filter does not rerender the whole dashboard shell or unrelated panels.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/06-state.md",
+        "references/08-components.md",
+        "references/07-door.md"
+      ],
+      "grading_assertions": [
+        "Audits the existing reactive state layout before editing and identifies broad Bind/Effect boundaries that would rerender unrelated UI.",
+        "Keeps one coherent source of truth while deriving narrower Source or Beam values for tabs, filters, counters, and detail data.",
+        "Uses Route/RouteBeam for branch keys such as selected tab when branch identity matters, even when that key is derived from a larger source.",
+        "Uses Bind/Effect only on derived values inside fragments that actually consume those values.",
+        "Does not split state into unrelated sources merely to imitate a virtual DOM; derives narrow views from the owning state."
+      ]
+    },
+    {
+      "id": "review-reactive-state-granularity",
+      "prompt": "Review this existing Doors diff for reactive-state best-practice issues: broad Source bindings, Effect boundaries around whole panels, tab switches implemented with Bind, and state split into many unrelated sources.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/06-state.md",
+        "references/07-door.md",
+        "references/08-components.md"
+      ],
+      "grading_assertions": [
+        "Audits the existing project code rather than only answering the requested local change.",
+        "Flags broad Bind/Effect boundaries that rerender unrelated UI when a derived value would be narrower.",
+        "Recommends Route/RouteBeam for branch keys where the active branch should stay mounted while the match is unchanged, including derived keys.",
+        "Distinguishes healthy single-source derivation from unnecessary splitting into many unrelated Sources.",
+        "Prioritizes findings by behavioral impact on Doors' no-virtual-DOM update model."
+      ]
+    },
+    {
+      "id": "app-setup-config",
+      "prompt": "Create or refactor a Doors app entry point to mount middleware, serve static files, configure CSP/timeouts, and keep routing inside the returned root component.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/01-get-started.md",
+        "references/04-app.md",
+        "references/21-configuration.md",
+        "references/05-routing.md"
+      ],
+      "grading_assertions": [
+        "Uses doors.NewApp with a per-request page factory that returns the root component.",
+        "Attaches middleware or static file serving through the documented App APIs.",
+        "Keeps app routing in the rendered component tree instead of turning NewApp's factory into the router.",
+        "Uses the documented configuration options for CSP, timeouts, server ID, or local cookie behavior."
+      ]
+    },
+    {
+      "id": "explicit-door-update",
+      "prompt": "Add a lazy details panel to a Doors component that loads content only after a click and updates just that panel.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/07-door.md",
+        "references/09-events.md",
+        "references/03-context.md",
+        "references/06-state.md"
+      ],
+      "grading_assertions": [
+        "Uses doors.Door when Bind/Effect alone is not the right fit for explicit partial updates.",
+        "Mounts the Door in the template with the documented proxy or render form.",
+        "Calls Door update methods from a handler or runtime-managed context, not from context.Background().",
+        "Accounts for lifecycle behavior when a dynamic parent unmounts or the Door is replaced."
+      ]
+    },
+    {
+      "id": "session-login-form",
+      "prompt": "Add email/password login and logout to a Doors app with session-backed auth state and a protected dashboard route; use the Doors skill's auth, routing, events, and state reference files before answering.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/18-storage-auth.md",
+        "references/19-session-instance.md",
+        "references/09-events.md",
+        "references/05-routing.md",
+        "references/06-state.md"
+      ],
+      "grading_assertions": [
+        "Uses session storage or server-owned state for auth identity and does not trust route params or hidden inputs.",
+        "Uses ASubmit or ARawSubmit according to the form decoding needs.",
+        "Updates route or reactive auth state after successful login/logout.",
+        "Checks authorization while deciding what to render and rechecks at the service/database operation level when permissions can change.",
+        "Initializes any local Source fields before Bind/Update and uses GoX ~(...) interpolation rather than JSX-style {expr}; does not render a LoginPage with a nil message Source field.",
+        "Does not call path.Update, auth.Update, or other state mutations from render paths such as Bind callbacks, Effect bodies, or GoX ~{...} blocks to redirect.",
+        "Uses Route primitives for route dispatch with auth binding inside protected branches, or binds auth first only when the whole app shell is auth-gated and routes inside the authorized branch; does not use whole-path Bind, path.Get inside an auth-only Bind, or pass path sources into login components that do not read or write the route."
+      ]
+    },
+    {
+      "id": "background-polling",
+      "prompt": "Show live job status in a Doors component by polling a backend every few seconds while the component is mounted.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/22-background-data.md",
+        "references/03-context.md",
+        "references/06-state.md",
+        "references/08-components.md"
+      ],
+      "grading_assertions": [
+        "Uses Doors-scoped background work for component or instance lifetime where appropriate.",
+        "Pushes backend updates into Source or another documented reactive primitive.",
+        "Uses the correct Doors runtime context for state updates and lifecycle-bound work.",
+        "Avoids unsafe mutation of plain shared Go state from the polling goroutine.",
+        "Uses GoX control flow documented by the loaded GoX reference; if only the fallback is available, does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return."
+      ]
+    },
+    {
+      "id": "raw-upload-download",
+      "prompt": "Add a form that uploads a CSV file, validates it on the server, and then offers a generated report download from a Doors page.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/09-events.md",
+        "references/14-resources.md",
+        "references/06-state.md",
+        "references/08-components.md",
+        "references/12-indication.md",
+        "references/13-actions.md",
+        "references/03-context.md"
+      ],
+      "grading_assertions": [
+        "Chooses ARawSubmit or another documented raw form path when multipart/file handling needs custom parsing.",
+        "Treats uploaded filenames, content type, and form values as client-controlled input.",
+        "Validates CSV by parsing/sniffing content rather than accepting or rejecting solely by filename suffix or MIME type.",
+        "Uses ResourceBytes, ResourceHook, ResourceHandler, or another documented resource shape for the generated download.",
+        "Sets a safe download name/content type and chooses cache/private behavior intentionally.",
+        "Does not derive the generated download name directly from the uploaded filename unless it is explicitly sanitized to a server-owned safe name.",
+        "Uses indication or actions only for client feedback, not as the source of durable server state."
+      ]
+    },
+    {
+      "id": "static-resource",
+      "prompt": "Serve embedded images and a CSS file from a Doors app, with cache headers and CSP configured correctly.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/04-app.md",
+        "references/14-resources.md",
+        "references/16-styles.md",
+        "references/21-configuration.md"
+      ],
+      "grading_assertions": [
+        "Chooses the appropriate resource constructor or app middleware for embedded/static assets.",
+        "Attaches CSS through the documented stylesheet resource pattern.",
+        "Sets cache behavior explicitly when it matters.",
+        "Accounts for CSP when external resources or scripts/styles are involved."
+      ]
+    },
+    {
+      "id": "javascript-action-bridge",
+      "prompt": "Add a browser-side toast event from a Doors handler and wire a small JavaScript module that can call back into Go.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/15-javascript.md",
+        "references/13-actions.md",
+        "references/09-events.md",
+        "references/21-configuration.md"
+      ],
+      "grading_assertions": [
+        "Uses Doors actions such as ActionEmit/Call for imperative browser behavior instead of replacing reactive UI updates.",
+        "Uses the documented managed script or module shape for browser-side JavaScript.",
+        "Uses AHook or the documented JS-to-Go hook API when JavaScript must call back into Go.",
+        "Attaches AHook/AData to the managed script that calls $hook/$data, or imports module code from that managed script.",
+        "Accounts for CSP/esbuild configuration when modules or external scripts are introduced."
+      ]
+    },
+    {
+      "id": "head-status-shared-attr",
+      "prompt": "Set a dynamic page title, return 404 for an unknown route, and sync a disabled attribute across a group of controls in a Doors page.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/20-head-status.md",
+        "references/17-shared-attr.md",
+        "references/05-routing.md",
+        "references/06-state.md"
+      ],
+      "grading_assertions": [
+        "Uses the documented head/title/meta API rather than hand-writing unrelated browser JavaScript.",
+        "Sets initial HTTP status from the rendered route fallback.",
+        "Uses AShared when one attribute should be shared across multiple elements.",
+        "Keeps route fallback behavior separate from authorization decisions.",
+        "Uses GoX control flow documented by the loaded GoX reference; if only the fallback is available, does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return.",
+        "Does not call AShared Enable/Disable from a render block merely to correct initial attribute state."
+      ]
+    },
+    {
+      "id": "scope-indication-pipeline",
+      "prompt": "Add two related save controls where normal edits may debounce, the final save must wait for pending edits, stale responses should not control the UI, and the user sees pending/error feedback.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/11-scopes.md",
+        "references/12-indication.md",
+        "references/13-actions.md",
+        "references/09-events.md",
+        "references/06-state.md"
+      ],
+      "grading_assertions": [
+        "Uses documented scope composition such as ScopeDebounce, ScopeLatest, ScopeSerial, ScopeBlocking, ScopeFrame, or JoinScopes instead of hand-rolled request scheduling.",
+        "Does not treat client-side scopes as data-safety or authorization guarantees.",
+        "Uses indicators for request lifecycle feedback and ActionIndicate/OnError only when timed or error feedback is needed.",
+        "Keeps durable UI/data state in Source/Beam or server-owned storage, not in temporary client indication.",
+        "Initializes any Source/Beam fields before Bind/Update rather than relying on zero-value handles."
+      ]
+    },
+    {
+      "id": "review-route-security",
+      "prompt": "Review this Doors diff for security issues around route params, active links, hidden inputs, and auth checks.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/05-routing.md",
+        "references/18-storage-auth.md",
+        "references/19-session-instance.md"
+      ],
+      "grading_assertions": [
+        "Treats URL, path params, query params, form values, and event data as client-controlled.",
+        "Flags any use of route matches, active links, or hidden inputs as authorization proof.",
+        "Recommends server-owned state or database checks for trust-bearing values.",
+        "Notes when handler-level rechecks are needed because permissions can change after render."
+      ]
+    },
+    {
+      "id": "gox-template-edit",
+      "prompt": "Edit a Doors .gox component to add a conditional empty state, a loop of results, and a click handler.",
+      "must_trigger": true,
+      "expected_references": [
+        "https://raw.githubusercontent.com/doors-dev/gox/refs/heads/main/llms.md",
+        "references/gox-minimal.md",
+        "references/09-events.md"
+      ],
+      "grading_assertions": [
+        "Reads the official GoX reference before editing .gox when network access is available.",
+        "Falls back to references/gox-minimal.md if the official GoX reference is unreachable.",
+        "Edits the .gox source and does not manually edit generated .x.go files.",
+        "Uses GoX control flow and Doors event attrs with valid modifier or proxy syntax.",
+        "If only the fallback reference is available, uses documented if/for placeholders, or a ~func inline expression whose switch cases return, instead of inventing unsupported placeholder forms."
+      ]
+    }
+  ]
+}

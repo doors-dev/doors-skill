@@ -4,6 +4,18 @@ URL is reactive state in Doors. Routing = branching content on `doors.Source[doo
 
 Path models (structs with `path:"..."` tags) are the recommended way to do routing, but they are not a framework-enforced requirement. You can route directly on `Location` using the same state routing primitives (`RouteMatch`, `RouteDerive`, etc.) without a path model, or implement a fully custom routing system on top of `doors.Router(ctx)`. See the "Source/Beam-Level Routing" section below for the primitive API.
 
+## Contents
+
+- [Quick Shape](#quick-shape)
+- [Key Types](#key-types)
+- [Path Models](#path-models)
+- [Route Builders](#route-builders)
+- [Direct Location Access](#direct-location-access)
+- [URL Building](#url-building)
+- [Multiple Models](#multiple-models)
+- [Security Rules](#security-rules)
+- [Related](#related)
+
 ## Quick Shape
 
 ```gox
@@ -155,6 +167,55 @@ func RouteLocationDefaultComp(comp gox.Comp) RouteBeam[Location]
 func RouteLocationDefaultBeam[C gox.Comp](render func(Beam[Location]) C) RouteBeam[Location]
 ```
 
+### Route Granularity Ladder
+Keep one typed path source of truth, but route and subscribe at the narrowest level that owns the concern:
+
+1. **Top level:** `doors.Route(doors.RouteModel(...), fallback)` chooses the path model. If broad state has global effects (auth shell, layout, head/status), handle it at that owner.
+2. **Segment/page switch:** inside a path model, use `path.Route(...)` with `RouteMatch`, `RouteDerive`, `RouteValue`, and defaults. This switch should be minimal.
+3. **Branch data:** pass the path source to a branch only when it needs to write the path; otherwise use `RouteDerive(...).Beam(...)` / `.Source(...)` to pass the smaller route value.
+4. **Params/query:** bind or effect params, query, filters, and pagination inside the page fragments that actually render them.
+
+`.Route` is not just syntactic branching. It subscribes to the routed value but swaps the door only when the matched route changes. `Bind` and `Effect` rerender on subscribed value changes; derive first when they should react to only one field.
+
+Direct path binds are usually not needed for routing. Avoid this top-level dispatch because it rerenders on every `Path` change, including unrelated query or param updates:
+
+```gox
+elem Page(path doors.Source[Path]) {
+    ~(path.Bind(elem(p Path) {
+        ~(if p.Section == SectionReports {
+            ~(ReportsPage{path: path})
+        } else {
+            ~(HomePage{})
+        })
+    }))
+}
+```
+
+Use Route primitives for the page switch:
+
+```gox
+elem Page(path doors.Source[Path]) {
+    ~(path.Route(
+        doors.RouteMatch(func(p Path) bool { return p.Section == SectionReports }).Source(ReportsPage),
+        doors.RouteMatch(func(p Path) bool { return p.Section == SectionHome }).Comp(HomePage{}),
+        doors.RouteDefaultComp[Path](NotFound{}),
+    ))
+}
+```
+
+If a branch only needs a derived route value, pass that value instead of the whole path:
+
+```gox
+~(path.Route(
+    doors.RouteDerive(func(p Path) (string, bool) { return p.ReportID, p.Section == SectionReportDetail }).Beam(ReportDetail),
+    doors.RouteDefaultComp[Path](ReportsIndex{}),
+))
+```
+
+Use `.Source(set, render)` on `RouteDerive` only when the child must write the derived value back into the parent path model.
+
+Do not use `RouteValue(Path{...})` on whole path models that contain pointers, slices, maps, `url.Values`, or query fields. It either will not compile or will compare the wrong thing. Match a comparable route enum, predicate, or derived value.
+
 ### Source/Beam-Level Routing
 
 For routing on any `Source[T]` or `Beam[T]` (not just `Location`):
@@ -185,6 +246,8 @@ func (r DeriveRoute[T1, T2]) Source(set func(T1, T2) T1, render func(Source[T2])
 ```
 
 **Default fallbacks:**
+
+When passing a component directly to `.Comp()` (e.g. `.Comp(MyPage{})`), the same Go value is reused across branch switches — its state persists. If you want the component to start fresh each time the route re-enters, wrap it in an element: `.Comp(<>~MyComp{}</>)`. This is a common source of bugs.
 ```go
 func RouteDefaultComp[T any](comp gox.Comp) RouteBeam[T]
 func RouteDefault[T any, C gox.Comp](render func(Source[T]) C) RouteSource[T]

@@ -21,6 +21,7 @@ Validate locally:
 ```bash
 claude plugin validate .
 claude plugin validate ./plugins/doors
+./install.sh validate
 ```
 
 ## Codex
@@ -36,6 +37,7 @@ For local testing:
 ```bash
 codex plugin marketplace add .
 codex plugin marketplace list
+./install.sh validate
 ```
 
 ## OpenCode
@@ -43,6 +45,7 @@ codex plugin marketplace list
 Install the skill directly:
 
 ```bash
+./install.sh validate
 ./install.sh opencode
 ```
 

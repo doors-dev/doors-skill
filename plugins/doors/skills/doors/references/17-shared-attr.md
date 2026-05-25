@@ -17,6 +17,8 @@ func (a AShared) Enable(ctx context.Context)
 func (a AShared) Disable(ctx context.Context)
 ```
 
+`NewAShared` starts enabled, so attaching `doors.NewAShared("disabled", "")` renders `disabled` initially. In examples, make the intended initial state explicit; avoid `Enable`/`Disable` calls from render blocks just to correct initial state.
+
 ## Use Case
 
 When one attribute is the whole job and several elements should stay in sync:

@@ -19,26 +19,35 @@ Start the goroutine where the data is consumed. Use `DetachedContext` to get a c
 - Is canceled when the owner unmounts
 
 ```go
-func NewLiveFeed(subscribe func(ctx context.Context, handler func(Item))) gox.Comp {
-    items := doors.NewSource([]Item{})
-    return liveFeed{items: items, subscribe: subscribe}
+type Profile struct {
+    Name   string
+    Avatar string
 }
 
-type liveFeed struct {
-    items    doors.Source[[]Item]
-    subscribe func(ctx context.Context, handler func(Item))
+func NewProfileView(poll func(ctx context.Context, onUpdate func(Profile))) gox.Comp {
+    profile := doors.NewSourceEqual(Profile{}, func(a, b Profile) bool {
+        return a == b
+    })
+    return profileView{profile: profile, poll: poll}
 }
 
-elem (f liveFeed) Main() {
+type profileView struct {
+    profile doors.Source[Profile]
+    poll    func(ctx context.Context, onUpdate func(Profile))
+}
+
+elem (f profileView) Main() {
     ~{
         ctx := doors.DetachedContext(ctx)
-        go f.subscribe(ctx, func(item Item) {
-            f.items.Mutate(ctx, func(cur []Item) []Item {
-                return append(cur, item)
-            })
+        go f.poll(ctx, func(p Profile) {
+            f.profile.Update(ctx, p)
         })
     }
-    ~(f.items.Bind(f.list))
+    ~(f.profile.Bind(f.showProfile))
+}
+
+elem (f profileView) showProfile(p Profile) {
+    <div>{p.Name}</div>
 }
 ```
 
@@ -52,10 +61,8 @@ elem (f liveFeed) Main() {
         select {
         case <-ctx.Done():
             return
-        case item := <-ch:
-            f.items.Mutate(ctx, func(cur []Item) []Item {
-                return append(cur, item)
-            })
+        case p := <-ch:
+            f.profile.Update(ctx, p)
         }
     }
 }))

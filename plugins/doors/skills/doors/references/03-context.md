@@ -1,5 +1,7 @@
 # Context
 
+The implicit `ctx` in GoX templates and handler callbacks covers 99% of cases. Derived contexts (`SessionContext`, `InstanceContext`, `DetachedContext`) are for manually spawned goroutines — a less common workflow.
+
 Doors uses multiple context layers. Using the wrong one for an API call causes panics or undefined behavior.
 
 ## Implicit `ctx` in GoX Templates
@@ -74,7 +76,7 @@ Returns a context canceled when the current **session** ends. Carries the curren
 
 Not tied to the current instance or dynamic owner. Use when work should outlive a single page instance but stop when the session ends.
 
-The context received by the app factory and middleware (`doors.NewApp(func(ctx, r)...)`, `app.Use(...)`) carries the same values as `SessionContext` — the same OK/NOT OK rules apply. This also applies to `r.Context()` inside event handlers: it has session-level values, not instance-level ones.
+The app factory `ctx` (`doors.NewApp(func(ctx, r)...)`) is a full runtime context — all APIs work. The request context in middleware (`app.Use(...)`) and `r.Context()` in event handlers carry session-level values (same OK/NOT OK rules as `SessionContext`).
 
 ### InstanceContext
 
@@ -163,7 +165,7 @@ Starting point: handler/render ctx
 ├─ Calling Doors APIs (reads, hooks, links) → use the ctx directly
 │
 ├─ Starting a goroutine that should:
-│  ├─ Stop when this component unmounts → DetachedContext(ctx)
+│  ├─ Stop when this component unmounts → DetachedContext(ctx) or `~(doors.Go(func(ctx){...}))`
 │  ├─ Stop when this page instance ends → InstanceContext(ctx)
 │  └─ Stop when the session ends → SessionContext(ctx)
 │
@@ -178,11 +180,11 @@ Starting point: handler/render ctx
 ## Common Mistakes
 
 1. **Using `context.Background()` for Doors APIs** — panics most of the time. Always use the provided `ctx`.
-2. **Using `SessionContext` for `Reload`** — fails silently or panics. SessionContext has no dynamic owner.
+2. **Using `SessionContext` for `Reload`** — panics. SessionContext has no dynamic owner.
 3. **Using `SessionContext` for `Beam.Read/Sub`** — these need instance render context.
 4. **Using `SessionContext` for `Call`/`XCall`, `Router`, `A(ctx, ...)`, or `InstanceStore`** — these need an instance core.
 5. **Waiting on `X*` channels during rendering** — deadlock or undefined behavior. Defer to `Go` or goroutine.
-6. **Using HTTP request context for Doors APIs** — panics. Only for HTTP-level operations.
+6. **Using HTTP request context for Doors APIs** — panics. `r.Context()` carries session-level values, not instance-level. Just use the `ctx` provided directly.
 
 ## Related
 

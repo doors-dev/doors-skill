@@ -2,9 +2,26 @@
 
 Reactive values in Doors: `Source[T]` (writable) and `Beam[T]` (read-only).
 
+## Contents
+
+- [Derivation vs Virtual DOM Diffing](#derivation-vs-virtual-dom-diffing)
+- [Types](#types)
+- [Creating Sources](#creating-sources)
+- [Derived Sources (writable views)](#derived-sources-writable-views)
+- [Derived Beams (read-only views)](#derived-beams-read-only-views)
+- [Rendering Strategies](#rendering-strategies)
+- [Reading](#reading)
+- [Updating](#updating)
+- [Equality & Skipping](#equality--skipping)
+- [Consistency](#consistency)
+- [Rules](#rules)
+- [Related](#related)
+
 ## Derivation vs Virtual DOM Diffing
 
 Doors does not have a virtual DOM. It doesn't render everything and diff. Instead, **derivation is the substitute**: you derive narrow, specific beams from one source of truth. When a source updates, only the beams whose derived value actually changed propagate. Only subscribers (Bind, Effect) to those changed beams re-render.
+
+Use the same ladder for every reactive model, not only paths: the current owner routes on a branch key (often derived from a larger source), narrower derived sources/beams represent fields or child state, and `Bind`/`Effect` live only in fragments that render those values.
 
 ```
 Source[Settings]         <- one source of truth
@@ -58,6 +75,8 @@ func NewSourceEqual[T any](init T, equal func(new, old T) bool) Source[T] // cus
 func NewSourceNoSkip[T comparable](init T) Source[T]                       // no-skip semantics
 func NewSourceEqualNoSkip[T any](init T, equal func(new, old T) bool) Source[T]
 ```
+
+`Source` and `Beam` values are handles. A struct field's zero value is nil; initialize it with `NewSource`, `DeriveSource`/`DeriveBeam`, or a parent-provided value before any `Bind`, `Effect`, `Read`, or `Update`.
 
 ## Derived Sources (writable views)
 
@@ -205,7 +224,7 @@ Only check the last `ok` — `Effect` fails only on canceled context, so if the 
 ))
 ```
 
-Fragment swaps only when active route changes. Within a matched route, use `Bind`, `Effect`, or derived values.
+Fragment swaps only when active route changes. Value changes that keep matching the same route do not rerender the route fragment. Within a matched route, use `Bind`, `Effect`, or derived values for the narrower data that fragment actually renders.
 
 A `Source` is also a `Beam`, so `source.RouteBeam(routes...)` is available when the route branches only need read-only access.
 

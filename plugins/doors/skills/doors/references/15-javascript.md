@@ -2,6 +2,10 @@
 
 Script resources + Go↔JS bridge (`AHook`, `$hook`, `$data`, `$on`).
 
+The main pattern: embed a separate CommonJS `.ts` file as a managed script using `src=(resource)` with `type="typescript" inline`. It is essentially an inline script stored in a separate file — it gets auto-wrapped with framework APIs and cannot be bundled.
+
+The TypeScript language server does not know about Doors post-processing — it will show errors for top-level `await` and Doors APIs like `$hook`, `$data`, etc. This is expected and not an issue at runtime.
+
 ## Script Shapes
 
 | Shape | How | Runtime |
@@ -16,8 +20,8 @@ Script resources + Go↔JS bridge (`AHook`, `$hook`, `$data`, `$on`).
 
 ```gox
 <script src=(resource)
-    type="text/typescript"   // JS (omit), module, typescript, module/typescript
-    inline                    // managed script behavior for src resource
+    type="typescript"   // JS (omit), module, typescript, module/typescript
+    inline                    // wraps resource content with Doors API for inline usage
     bundle                    // bundle dependencies
     raw                       // skip transformation, serve as-is
     specifier="app"           // register in import map
@@ -32,12 +36,12 @@ Script resources + Go↔JS bridge (`AHook`, `$hook`, `$data`, `$on`).
 
 Auto-wrapped with:
 - `$data(name)` — read server-provided values (string/JSON → direct, `[]byte` → `Promise<ArrayBuffer>`)
-- `$hook(name, arg?)` — call Go handler, returns promise. Throws `HookErr` on failure (catch for expected failures)
+- `$hook(name, arg?)` — call Go handler, returns promise. Throws `HookErr` on failure. Check `instanceof HookErr` to distinguish framework errors from other errors.
 - `$fetch(name, arg?)` — call Go handler, returns raw `Response`
 - `$on(name, handler)` — register JS handler for `ActionEmit`. Must be synchronous. Receives `(arg, err)` — `err.kind` tells failure type.
-- `$sys.ready()` — promise that resolves when runtime initialized
+- `$sys.ready()` — promise that resolves when the page is loaded and runtime initialized. All framework APIs (`$data`, `$hook`, `$fetch`, `$on`) already wait for readiness internally, so this is only needed for non-framework operations that depend on the runtime.
 - `$sys.clean(fn)` — register cleanup on unmount (timers, listeners)
-- `$sys.activateLinks()` — re-scan ALink elements after DOM changes
+- `$sys.activateLinks()` — re-scan `ALink` elements to apply active-link indication. Useful after JavaScript-driven URL fragment changes.
 - top-level `await`
 
 Auto-detected request body: `undefined`→no body, `FormData`→multipart, `URLSearchParams`→form-urlencoded, `Blob`→raw blob body, `File`→raw file body, `ReadableStream`→`application/octet-stream`, `ArrayBuffer`/typed arrays→`application/octet-stream`, anything else→JSON.
@@ -52,6 +56,8 @@ Auto-detected request body: `undefined`→no body, `FormData`→multipart, `URLS
 ```
 
 `data:name=(expr)` is GoX shorthand for `doors.AData{Name: "name", Value: expr}`.
+
+`$data`, `$hook`, and `$fetch` read attrs from the managed script element they run on. Attach `AData`, `AHook`, or `ARawHook` to that same managed inline script, or to the `src` script marked `inline`; a separate module script does not inherit those helpers from another script element.
 
 ## Hooks (JS→Go)
 
@@ -103,7 +109,7 @@ Request body auto-detected: `undefined` (no body), `FormData` (multipart), `URLS
 </script>
 ```
 
-Handler search scoped through Door tree — nearest matching wins. Must be synchronous.
+Handler found by searching the current dynamic node and up the tree. Returns the first match in the current subtree.
 
 ## Modules
 

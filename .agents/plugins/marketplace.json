@@ -10,7 +10,7 @@
         "source": "local",
         "path": "./plugins/doors"
       },
-      "description": "Skill for building server-side interactive web applications with Doors, a Go UI framework with reactive state, typed routing, and GoX templates.",
+      "description": "Always use for any Doors project work. Covers the Go server-side UI framework, reactive state, typed routing, events, auth, sessions, resources, and GoX template boundaries.",
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"

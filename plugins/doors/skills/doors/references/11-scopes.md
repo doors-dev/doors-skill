@@ -123,7 +123,7 @@ Each scope sees the event only after the previous accepted it.
 - Not a backend permission or one-shot guarantee
 - Pair with indication for polished UX
 - `ScopeBlocking` is the simplest "prevent double-submit"
-- `ScopeLatest` may cancel in-flight client work but request may already reach server
+- `ScopeLatest` cancels in-flight indication and client-side work, but the request may already have been sent and will reach the server regardless
 
 ## Related
 

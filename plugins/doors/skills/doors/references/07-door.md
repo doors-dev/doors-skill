@@ -21,7 +21,7 @@ elem (p *Panel) Main() {
     </div>
 }
 ```
-Proxied element becomes the Door container. If empty, uses Door's stored content.
+Proxied element becomes the Door container. If the proxy has seed content (`<div>seed</div>`), that becomes the initial content. If the proxy has no content (`<div></div>`) and the Door had stored state from a prior `Inner` call, the stored content renders inside the empty tag. If both seed and stored state are absent, the container is empty.
 
 ### Current State (render stored content)
 
@@ -69,7 +69,7 @@ func (d *Door) XUnmount(ctx context.Context) <-chan error
 - `nil` = completed
 - non-nil error = failed/canceled before finishing
 - `context.Canceled` = overwritten by newer operation or unmount
-- closed channel with no value = Door not mounted when observed
+- closed channel with no value = Door not mounted when observed, but internal state was updated (will affect future renders)
 
 **Do not wait on X* during rendering.** Use `doors.Go`, goroutine with `doors.DetachedContext(ctx)`, or `doors.InstanceContext(ctx)`.
 
@@ -158,7 +158,7 @@ func (a *Append) add(ctx context.Context, content any) {
 
 Each call to `add` chains: the old Door becomes static (frozen content + new Door slot), and the struct field advances to the new Door. Previous content is preserved, new content appends at the end.
 
-No synchronization is needed for `a.door` because calls to the same hook are serialized. But in general, when mutating plain struct state from multiple hooks or goroutines, you must handle concurrency yourself — only `Source`/`Beam` mutations are safe from any context.
+No synchronization is needed for `a.door` because calls to the same hook are serialized. But `a.door` is a plain struct field — when mutating plain struct state from multiple hooks or goroutines, you must handle concurrency yourself. `Source`/`Beam` mutations and Door operations are goroutine-safe.
 
 ### Collections of Doors
 

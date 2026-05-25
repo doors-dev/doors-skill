@@ -91,8 +91,10 @@ Stylesheet and script resources are public and cacheable by default — no `cach
 
 Readable filename in generated URL:
 ```gox
-<a href=(doors.ResourceBytes(reportPDF)) name="report.pdf">Download</a>
+<a (doors.ResourceBytes(reportPDF)) name="report.pdf">Download</a>
 ```
+
+For generated downloads, use a fixed or sanitized `name`; do not echo uploaded filenames directly. If the exact response type matters, set `type` on managed generic resources or use `ResourceHandler`/`ResourceHook` and set `Content-Type` yourself. Instance-private resources are the default; use `cache` only for stable public content.
 
 ## ResourceExternal
 

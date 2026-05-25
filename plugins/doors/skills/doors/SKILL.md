@@ -1,10 +1,9 @@
 ---
 name: doors
-description: Use when creating, editing, reviewing, debugging, or extending applications built with Doors, the Go server-side interactive UI framework. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, and framework-specific conventions. For GoX template syntax and .gox authoring rules, use the GoX LLM reference instead.
+description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, and framework-specific conventions. When touching .gox files, writing GoX snippets, or using GoX tooling, read the GoX LLM reference first and use the bundled minimal GoX fallback if that URL is unavailable.
 license: Apache-2.0
-compatibility: codex, claude-code, opencode
 metadata:
-  version: "0.1.0"
+  version: "0.1.2"
   language: go
 ---
 
@@ -18,11 +17,15 @@ Use this skill as the entry point for Doors-specific work. Keep this file as an 
 
 Doors apps commonly use GoX templates, but this skill does not teach GoX syntax.
 
-When a task touches `.gox` files, template authoring, generated `.x.go` files, GoX formatting, GoX generation, GoX compile errors, or GoX CLI/module compatibility, first read the GoX LLM reference:
+When a task touches `.gox` files, template authoring, GoX snippets/examples, generated `.x.go` files, GoX formatting, GoX generation, GoX compile errors, or GoX CLI/module compatibility, first read the GoX LLM reference:
 
 - `https://raw.githubusercontent.com/doors-dev/gox/refs/heads/main/llms.md`
 
 Follow that reference for `.gox` authoring rules, generated-file handling, `gox fmt`, `gox gen`, `gox ver`, and editor/tooling expectations.
+
+If the URL is unreachable or network access is unavailable, read `references/gox-minimal.md` before editing `.gox` files. Treat it as an offline safety net: it covers only the common syntax and workflow needed for Doors work, so prefer the remote GoX reference whenever it can be fetched.
+
+When using the fallback, only `~(if ... { ... })` and `~(for ... { ... })` are documented template control flow. Do not write `~(switch ...)`; use an `if`/`else if` chain, or use `~func { switch ... }` where each case returns.
 
 Doors-specific rule: if the project already depends on `github.com/doors-dev/doors`, do not add or use `goxx`.
 
@@ -30,11 +33,11 @@ Doors-specific rule: if the project already depends on `github.com/doors-dev/doo
 
 Before editing a Doors project:
 
-1. Inspect the existing project structure and conventions.
+1. Inspect the existing project structure and conventions; audit current Doors code for routing, state, lifecycle, auth, event, and resource best-practice issues before editing.
 2. Check `go.mod` for `github.com/doors-dev/doors`.
-3. If editing `.gox`, read the GoX LLM reference first.
+3. If editing, reviewing, or writing `.gox` snippets, read the GoX LLM reference first.
 4. Identify the smallest Doors domain involved: app setup, routing, state, components, events, doors, resources, JavaScript, styles, auth, sessions, background data, or configuration.
-5. Read only the matching reference files from the map below.
+5. Read matching `references/` files from the map below; `./docs` and code fact-check them, not replace them.
 6. Prefer local edits that fit existing routing, state, styling, and auth patterns.
 7. Do not edit generated `.x.go` files.
 8. Run or suggest `gox fmt`, `gox gen`, and `go test ./...` when appropriate for the change.
@@ -45,8 +48,8 @@ Ask the user only for product requirements that cannot be inferred from the code
 
 - Each interactive page is a live server-side instance. There is no virtual DOM.
 - Components are static by default: `Main()` renders once and stays. Re-rendering is explicit and targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
-- State derivation replaces virtual DOM diffing. Instead of rendering everything and diffing, derive narrow beams from one source of truth; only subscribers to changed beams update.
-- The current URL is reactive state. Routing usually branches from typed path models and route sources.
+- State derivation replaces virtual DOM diffing. For all reactive state, use a ladder: branch key owned at that level (often derived), narrower branches, then field/param/query binds only in consuming fragments.
+- `Route` swaps only when the matched branch changes; `Bind`/`Effect` rerender on subscribed value changes, so derive before binding.
 - Browser events call server handlers bound to the live page instance. If a subtree disappears, hooks and dynamic bindings inside it disappear too.
 - A session is shared across browser pages/tabs. An instance is one live page with its own render tree, handlers, subscriptions, and lifecycle.
 
@@ -73,6 +76,7 @@ Read references by task, not all at once.
 
 | Task | Read |
 |------|------|
+| Work on `.gox` files or GoX snippets when the GoX LLM reference URL is unavailable | `references/gox-minimal.md` |
 | Create a project, inspect starter layout, or add static files | `references/01-get-started.md`, `references/04-app.md`, `references/21-configuration.md` |
 | Work with app creation, middleware, mounting, static dirs, or resources at fixed paths | `references/04-app.md` |
 | Choose the right context, start goroutines, wait on X* methods, or handle detached work | `references/03-context.md` |
@@ -211,7 +215,7 @@ The function passed to `NewApp` is a per-request page factory, not the router. U
 
 Prefer typed path models for normal app routing. A path model decodes the URL into a Go value and encodes the same value back into a URL for links, redirects, and programmatic navigation.
 
-When changing routing, inspect the existing model first, add variants to the existing model when appropriate, put fallbacks last, and do not treat a route match as authorization.
+When changing routing, inspect the existing model first, add variants to the existing model when appropriate, put fallbacks last, and do not treat a route match as authorization. Prefer `doors.Route`, `RouteModel`, `source.Route`, `RouteMatch`, `RouteDerive`, `RouteValue`, and defaults for dispatch. `.Route` keeps the active branch when the active match stays the same; a branch inside `Bind` rerenders on every subscribed value change. Do not `Bind` the whole path at the page shell to switch on one field; the ladder is path/model branch key, then narrower derived branch keys, then params/query effects or binds only where consumed.
 
 ### State
 
@@ -219,7 +223,9 @@ Use `doors.Source[T]` for writable state and `doors.Beam[T]` for read-only deriv
 
 Keep identifiers, filters, pagination, selection, route values, and small UI state in Doors state. Load backing data while rendering or handling events instead of turning live page memory into a large cache.
 
-Treat source values as immutable. If a source holds a slice, map, pointer, or mutable struct, replace it with a new value instead of mutating it in place.
+Treat source values as immutable. If a source holds a slice, map, pointer, or mutable struct, replace it with a new value instead of mutating it in place. Apply the granularity ladder to all state, not only URLs: route on branch keys, derive fields, and bind/effect only where consumed.
+
+Render functions, including `Bind` callbacks, `Effect` bodies, and `~{...}` blocks in `elem` rendering, should render from current state rather than perform route changes or other state mutations. For navigation, update the route source from event handlers, app factory/bootstrap code, or another runtime-managed side-effect path.
 
 ### Context
 
@@ -241,15 +247,16 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 
 ### URL and Route Trust
 
-- Treat the URL, path params, query params, form values, and all browser-sent event data as client-controlled input.
+- Treat the URL, path params, query params, form values, uploaded filenames/content types, and all browser-sent event data as client-controlled input.
 - A path model match means "URL parses", not "authorized".
 - Do not store auth, role, permission, tenant, ownership, or other trust-bearing values in the route.
 - Keep trust-bearing values in server-owned state: local variables, struct fields, session storage, instance storage, or the database.
 - Do not use active links, matched routes, hidden inputs, or client-provided IDs as proof of permission.
+- For generated downloads, use fixed or sanitized server-owned filenames; do not derive the download name directly from an uploaded filename.
 
 ### Authorization
 
-- Check permissions while deciding what to render. In most cases this is sufficient because the user can only trigger hooks that were rendered into their mounted UI.
+- Check permissions while deciding what to render. If route and auth state both affect a branch, bind/effect both there; an auth-only `Bind` that merely passes a route source onward is not enough unless that child binds/effects the route.
 - If permissions are dynamic and can change between render and handler execution, re-check at the database transaction or service operation level, not merely in the hook handler.
 
 ### Hooks and Lifetime
@@ -270,6 +277,7 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 ## Reference Inventory
 
 - `references/01-get-started.md` - project setup, starter clone, minimal project, project structure
+- `references/gox-minimal.md` - offline fallback for common GoX template syntax and workflow
 - `references/03-context.md` - implicit GoX ctx, Session/Instance/Detached contexts, API compatibility tables
 - `references/04-app.md` - `NewApp`, middleware, `UseFS`, `UseDir`, `UseResource`, cache constants, mounting
 - `references/05-routing.md` - path models, params, query, `Route`, `RouteModel`, `Location`

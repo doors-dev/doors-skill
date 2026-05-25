@@ -2,6 +2,18 @@
 
 DOM events connected to Go handlers through special attributes.
 
+## Contents
+
+- [Event Attr Types](#event-attr-types)
+- [Request Types](#request-types)
+- [Common Fields (all event attrs)](#common-fields-all-event-attrs)
+- [Handler Return](#handler-return)
+- [Flow](#flow)
+- [Attach Styles](#attach-styles)
+- [Reuse (activated attrs)](#reuse-activated-attrs)
+- [Unsupported Events](#unsupported-events)
+- [Related](#related)
+
 ## Event Attr Types
 
 | Attr | Event | Handler receives |
@@ -102,7 +114,9 @@ type ParsedForm interface {
 }
 ```
 
-`ASubmit[T]` has optional `MaxMemory int` (defaults 8MB, passed to `ParseMultipartForm`).
+`ASubmit[T]` uses `github.com/go-playground/form/v4` for decoding form values into `D`. Follow that library's documentation for struct tag annotations. `MaxMemory` defaults to 8MB, passed to `ParseMultipartForm`.
+
+For uploads or custom multipart parsing, use `ARawSubmit`, set an intentional parse limit with `ParseForm(maxMemory)` or `MaxMemory`, and treat filenames, content types, form fields, and file bytes as client-controlled. Validate by parsing/sniffing the content you accept; never trust the browser-provided filename or MIME type as proof, and do not accept/reject CSV solely by filename suffix.
 
 ## Common Fields (all event attrs)
 

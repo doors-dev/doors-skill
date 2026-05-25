@@ -78,7 +78,7 @@ app.Use(doors.UseFS("/static", assets.Static(), doors.CacheControlStatic))
 app.Use(doors.UseResource("/assets/font.woff2", doors.ResourceFS(fsys, "font.woff2"), "font/woff2"))
 ```
 
-Pass an empty `contentType` to let the resource registry detect it.
+An empty `contentType` leaves the Content-Type header unset.
 
 ### Custom Middleware
 
@@ -87,6 +87,8 @@ app.Use(logger.Handler, cors.New(cors.Options{}).Handler, doors.UseDir(...))
 ```
 
 Middleware runs in registration order. Non-short-circuiting requests fall through to Doors handler.
+
+The request context in middleware carries `SessionContext` values (session-level, not instance-level). See [context.md](./03-context.md) for API compatibility. This is useful for auth bootstrapping — reading cookies and populating `SessionStore` before the handler runs.
 
 ## Options
 

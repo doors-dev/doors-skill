@@ -113,6 +113,8 @@ elem (l navLink) Main() {
 - **Shared**: accept `Source`/`Beam` from parent via constructor/field
 - **Derived**: `DeriveSource`/`DeriveBeam` from a parent source, also in the constructor
 
+Do not add a `doors.Source`/`doors.Beam` field and leave initialization implicit. Snippets with source fields should show an ordinary Go constructor/factory or parent wiring that gives the field a non-nil handle before `Bind` or `Update`.
+
 ```go
 func LocationSelector(apply func(ctx context.Context, city int)) gox.Comp {
     loc := doors.NewSource(location{})
