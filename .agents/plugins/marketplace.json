@@ -1,0 +1,20 @@
+{
+  "name": "doors-skill",
+  "interface": {
+    "displayName": "Doors Skill"
+  },
+  "plugins": [
+    {
+      "name": "doors",
+      "source": {
+        "source": "local",
+        "path": "./plugins/doors"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

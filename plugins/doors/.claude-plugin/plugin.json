@@ -1,0 +1,12 @@
+{
+  "name": "doors",
+  "displayName": "Doors",
+  "version": "1.0.0",
+  "description": "Agent support for developing Go applications with Doors.",
+  "author": {
+    "name": "Doors Dev"
+  },
+  "repository": "https://github.com/doors-dev/doors-skill",
+  "license": "Apache-2.0",
+  "skills": "./skills/"
+}

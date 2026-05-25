@@ -1,0 +1,24 @@
+{
+  "name": "doors",
+  "version": "1.0.0",
+  "description": "Agent support for developing Go applications with Doors.",
+  "author": {
+    "name": "Doors Dev"
+  },
+  "repository": "https://github.com/doors-dev/doors-skill",
+  "license": "Apache-2.0",
+  "keywords": ["go", "doors", "framework", "agent-skill"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Doors",
+    "shortDescription": "Go framework development support",
+    "longDescription": "Helps coding agents build, test, review, and maintain Go applications that use Doors.",
+    "developerName": "Doors Dev",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": [
+      "Use Doors conventions to implement this feature.",
+      "Review this Doors project for routing, middleware, and testing issues."
+    ]
+  }
+}

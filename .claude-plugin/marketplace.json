@@ -1,0 +1,17 @@
+{
+  "name": "doors-skill",
+  "owner": {
+    "name": "Doors Dev"
+  },
+  "plugins": [
+    {
+      "name": "doors",
+      "source": "./plugins/doors",
+      "description": "Agent support for developing Go applications with Doors.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Doors Dev"
+      }
+    }
+  ]
+}
