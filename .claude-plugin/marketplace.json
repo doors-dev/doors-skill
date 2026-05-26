@@ -8,7 +8,7 @@
       "name": "doors",
       "source": "./plugins/doors",
       "description": "Always use for any Doors project work. Covers the Go server-side UI framework, reactive state, typed routing, events, auth, sessions, resources, and GoX template boundaries.",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "author": {
         "name": "Doors Dev"
       }

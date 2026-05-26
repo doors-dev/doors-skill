@@ -3,7 +3,7 @@ name: doors
 description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, and framework-specific conventions. When touching .gox files, writing GoX snippets, or using GoX tooling, read the GoX LLM reference first and use the bundled minimal GoX fallback if that URL is unavailable.
 license: Apache-2.0
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
   language: go
 ---
 
@@ -27,7 +27,7 @@ If the URL is unreachable or network access is unavailable, read `references/gox
 
 When using the fallback, only `~(if ... { ... })` and `~(for ... { ... })` are documented template control flow. Do not write `~(switch ...)`; use an `if`/`else if` chain, or use `~func { switch ... }` where each case returns.
 
-Doors-specific rule: if the project already depends on `github.com/doors-dev/doors`, do not add or use `goxx`.
+Do not use the `goxx` extension package in Doors apps; it is not compatible. Use Doors helpers instead, which cover the common helper patterns used in Doors apps.
 
 ## First Pass Workflow
 
@@ -40,7 +40,8 @@ Before editing a Doors project:
 5. Read matching `references/` files from the map below; `./docs` and code fact-check them, not replace them.
 6. Prefer local edits that fit existing routing, state, styling, and auth patterns.
 7. Do not edit generated `.x.go` files.
-8. Run or suggest `gox fmt`, `gox gen`, and `go test ./...` when appropriate for the change.
+8. When browser/runtime behavior is unclear and no reliable browser controller is available, use a short Rod check or temporary Go test to inspect the real page. Convert it into a committed e2e test when it verifies user-facing behavior or prevents a regression; delete it when it was only exploratory. Do not use Rod for pure logic that ordinary Go tests cover.
+9. Run or suggest `gox fmt`, `gox gen`, and `go test ./...` when appropriate for the change.
 
 Ask the user only for product requirements that cannot be inferred from the code, such as unknown URL shape, ambiguous app section, missing data fields, permissions policy, destructive behavior, or deployment settings.
 
@@ -99,6 +100,7 @@ Read references by task, not all at once.
 | Set page title, meta tags, or initial HTTP status | `references/20-head-status.md` |
 | Configure CSP, timeouts, esbuild, server ID, error pages, or session tracking | `references/21-configuration.md` |
 | Push data from background sources such as polling, Kafka, or Watermill into reactive state | `references/22-background-data.md`, `references/03-context.md` |
+| Test a Doors app or design an app-level e2e test harness | `references/23-testing.md` |
 
 ## Quick Pattern: Interactive Elements
 
@@ -276,8 +278,8 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 
 ## Reference Inventory
 
-- `references/01-get-started.md` - project setup, starter clone, minimal project, project structure
 - `references/gox-minimal.md` - offline fallback for common GoX template syntax and workflow
+- `references/01-get-started.md` - project setup, starter clone, minimal project, project structure
 - `references/03-context.md` - implicit GoX ctx, Session/Instance/Detached contexts, API compatibility tables
 - `references/04-app.md` - `NewApp`, middleware, `UseFS`, `UseDir`, `UseResource`, cache constants, mounting
 - `references/05-routing.md` - path models, params, query, `Route`, `RouteModel`, `Location`
@@ -298,3 +300,4 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 - `references/20-head-status.md` - title/meta mounting, initial HTTP status
 - `references/21-configuration.md` - `Conf`, CSP, ESProfile/JSX, `WithID`, error page, session tracker
 - `references/22-background-data.md` - background goroutines, polling/external data, `DetachedContext`, `SessionStore.Init`
+- `references/23-testing.md` - Go vs Rod test boundaries, e2e harness, waiting rules, agent/dev browser checks
