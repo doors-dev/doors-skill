@@ -3,7 +3,7 @@ name: doors
 description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, and framework-specific conventions. When touching .gox files, writing GoX snippets, or using GoX tooling, read the GoX LLM reference first and use the bundled minimal GoX fallback if that URL is unavailable.
 license: Apache-2.0
 metadata:
-  version: "0.1.3"
+  version: "0.1.4"
   language: go
 ---
 

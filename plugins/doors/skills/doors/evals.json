@@ -1,5 +1,5 @@
 {
-  "version": "0.1.3",
+  "version": "0.1.4",
   "skill": "doors",
   "cases": [
     {
@@ -309,6 +309,24 @@
         "Edits the .gox source and does not manually edit generated .x.go files.",
         "Uses GoX control flow and Doors event attrs with valid modifier or proxy syntax.",
         "If only the fallback reference is available, uses documented if/for placeholders, or a ~func inline expression whose switch cases return, instead of inventing unsupported placeholder forms."
+      ]
+    },
+    {
+      "id": "app-testing-strategy",
+      "prompt": "Design tests for a Doors app change that adds pure validation logic, a click handler that updates Source-backed UI, an ALink navigation flow with browser back, and a repository query. Include how you would use Rod during development if no browser controller is available.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/23-testing.md",
+        "references/09-events.md",
+        "references/10-navigation.md",
+        "references/06-state.md"
+      ],
+      "grading_assertions": [
+        "Uses ordinary Go unit or integration tests for pure validation and repository/query logic rather than Rod.",
+        "Uses Rod e2e against a real doors.App for hook-driven Source updates, Bind/Effect rerenders, ALink navigation, and browser back behavior.",
+        "Tests runtime behavior through real browser actions and visible DOM/URL postconditions rather than calling handlers directly, mutating Source from the test, or only checking href/initial render.",
+        "Builds or recommends a small Rod harness with Rod's default Chromium download behavior, CI NoSandbox only when needed, timeout-bound navigation, page/server cleanup, and user-visible assertions.",
+        "Treats temporary Rod checks as an investigation aid for browser/runtime behavior, converts meaningful checks into committed e2e tests, and deletes one-off probes."
       ]
     }
   ]
