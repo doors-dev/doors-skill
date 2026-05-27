@@ -282,6 +282,8 @@ Default: in-flight propagation can be skipped by newer updates (UI prefers lates
 
 During one render/update cycle, a Door subtree sees one coherent view of a `Source` and all derived sources/beams. Parent and children never see different versions halfway through the same render. Effect + Bind + subscriptions observe the same value within one cycle.
 
+`Read` and `Sub` capture the observable value for the current cycle. Mutating the same source later in the same cycle (including in the page factory) won't be visible until the next cycle. To redirect or adjust the initial location in the page factory, use `Get()` to inspect the current value (it does not freeze), call `Update` or `Mutate`, and place `Sub`/`ReadAndSub` **after** the mutation.
+
 ## Rules
 
 - One source of truth, derive smaller pieces. Derivation replaces virtual DOM diffing.

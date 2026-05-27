@@ -267,6 +267,19 @@ func Router(ctx context.Context) Source[Location]  // current URL as writable so
 loc := doors.Router(ctx).Get().Clone()
 ```
 
+### Mutating location in the page factory
+
+You can redirect or adjust the initial URL by mutating `doors.Router(ctx)` in the page function passed to `doors.NewApp`. The browser URL is replaced and the app observes the new location as the initial state:
+```go
+func AppPage(w http.ResponseWriter, r *http.Request) gox.Comp {
+    ctx := r.Context()
+    doors.Router(ctx).Update(ctx, doors.Location{Segments: []string{"login"}})
+    return App{}
+}
+```
+
+**Important:** To read the current location before deciding whether to redirect, use `Get()` — unlike `Read`, it does not freeze the observable value for the render cycle. Place any `Sub` or `ReadAndSub` calls **after** the mutation.
+
 ## URL Building
 
 ```go
