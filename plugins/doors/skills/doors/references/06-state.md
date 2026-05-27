@@ -228,6 +228,24 @@ Fragment swaps only when active route changes. Value changes that keep matching 
 
 A `Source` is also a `Beam`, so `source.RouteBeam(routes...)` is available when the route branches only need read-only access.
 
+**Render methods** on match builders produce route branches:
+
+| Method | Signature | Receives |
+|--------|-----------|----------|
+| `.Comp(comp)` | fixed `gox.Comp` | no reactive value |
+| `.Beam(render)` | `func(Beam[T]) gox.Elem` | live read-only beam |
+| `.Bind(render)` | `func(T) gox.Elem` | raw value directly (shorthand for Beam + bind) |
+| `.Source(render)` | `func(Source[T]) gox.Elem` | live writable source |
+
+`.Bind` is equivalent to `.Beam(func(b Beam[T]) gox.Elem { return b.Bind(render).Main() })`.
+
+**Default fallbacks** always match (place last):
+
+- `RouteDefaultComp(comp)` — fixed component
+- `RouteDefaultBeam(render)` — read-only beam
+- `RouteDefaultBind(render)` — raw value (shorthand for RouteDefaultBeam + bind)
+- `RouteDefault(render)` — writable source, only inside `source.Route(...)`
+
 ### Sub — manual subscription
 
 `Sub` subscribes to future changes and fires immediately with the current value:

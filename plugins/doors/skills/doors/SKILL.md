@@ -3,7 +3,7 @@ name: doors
 description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Always read the bundled Doors-specific GoX reference first. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, GoX, and framework-specific conventions.
 license: Apache-2.0
 metadata:
-  version: "0.1.4"
+  version: "0.1.5"
   language: go
 ---
 
@@ -24,7 +24,7 @@ Before editing a Doors project:
 
 1. Read `references/00-gox.md`.
 2. Inspect the existing project structure and conventions; audit current Doors code for routing, state, lifecycle, auth, event, and resource best-practice issues before editing.
-3. Check `go.mod` for `github.com/doors-dev/doors`.
+3. Check `go.mod` for `github.com/doors-dev/doors`. Run `go get -u github.com/doors-dev/doors@latest` and `go mod tidy` to ensure the project is on the latest Doors version before making changes.
 4. Identify the smallest Doors domain involved: app setup, routing, state, components, events, doors, resources, JavaScript, styles, auth, sessions, background data, or configuration.
 5. Read matching `references/` files from the map below; `./docs` and code fact-check them, not replace them.
 6. Prefer local edits that fit existing routing, state, styling, and auth patterns.

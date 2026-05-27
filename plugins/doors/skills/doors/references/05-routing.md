@@ -165,6 +165,7 @@ func RouteModelBeam[M any, C gox.Comp](render func(Beam[M]) C) RouteBeam[Locatio
 func RouteLocationDefault[C gox.Comp](render func(Source[Location]) C) RouteSource[Location]
 func RouteLocationDefaultComp(comp gox.Comp) RouteBeam[Location]
 func RouteLocationDefaultBeam[C gox.Comp](render func(Beam[Location]) C) RouteBeam[Location]
+func RouteLocationDefaultBind[C gox.Comp](render func(Location) C) RouteBeam[Location]
 ```
 
 ### Route Granularity Ladder
@@ -236,10 +237,12 @@ func RouteValue[T comparable](v T) MatchRoute[T]    // sugar for RouteMatch(== v
 // MatchRoute
 func (m MatchRoute[T]) Comp(comp gox.Comp) RouteBeam[T]
 func (m MatchRoute[T]) Beam(render func(Beam[T]) gox.Elem) RouteBeam[T]
+func (m MatchRoute[T]) Bind(render func(T) gox.Elem) RouteBeam[T]    // shorthand for Beam + bind, receives raw value
 func (m MatchRoute[T]) Source(render func(Source[T]) gox.Elem) RouteSource[T]
 
 // DeriveRoute
 func (r DeriveRoute[T1, T2]) Beam(render func(Beam[T2]) gox.Elem) RouteBeam[T1]
+func (r DeriveRoute[T1, T2]) Bind(render func(T2) gox.Elem) RouteBeam[T1]  // shorthand for Beam + bind
 func (r DeriveRoute[T1, T2]) Source(set func(T1, T2) T1, render func(Source[T2]) gox.Elem) RouteSource[T1]
 ```
 
@@ -250,6 +253,7 @@ When passing a component directly to `.Comp()` (e.g. `.Comp(MyPage{})`), the sam
 func RouteDefaultComp[T any](comp gox.Comp) RouteBeam[T]
 func RouteDefault[T any, C gox.Comp](render func(Source[T]) C) RouteSource[T]
 func RouteDefaultBeam[T any, C gox.Comp](render func(Beam[T]) C) RouteBeam[T]
+func RouteDefaultBind[T any, C gox.Comp](render func(T) C) RouteBeam[T]     // shorthand for RouteDefaultBeam + bind
 ```
 
 ## Direct Location Access
