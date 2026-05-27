@@ -33,7 +33,7 @@ Good unit-test targets:
 Use e2e tests when the behavior exists because the runtime, browser, or client script is involved:
 
 - A hook mutates a `Source` and the DOM rerenders
-- `Bind`, `Effect`, `Route`, `RouterBeam`, or `RouterLens` selects the right subtree
+- `Bind`, `Effect`, `Route`, route-derived `Source`/`Beam`, or `RouterBeam` selects the right subtree
 - `ALink` updates the current instance, creates a new instance, or works with browser back/forward
 - Form/input/key/pointer capture settings affect event payloads
 - `Door.Inner`, `Door.Outer`, `Door.Static`, `Door.Reload`, or `X*` calls update the intended dynamic parent

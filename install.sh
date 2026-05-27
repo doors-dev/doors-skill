@@ -42,6 +42,15 @@ if unknown:
     print("evals.json references missing files:", ", ".join(unknown), file=sys.stderr)
     sys.exit(1)
 
+missing_gox = [
+    case.get("id", "<unknown>")
+    for case in evals.get("cases", [])
+    if "references/00-gox.md" not in case.get("expected_references", [])
+]
+if missing_gox:
+    print("evals.json cases must include references/00-gox.md:", ", ".join(missing_gox), file=sys.stderr)
+    sys.exit(1)
+
 missing = []
 for path in sorted((skill / "references").glob("*.md")):
     ref = f"references/{path.name}"
@@ -65,8 +74,8 @@ validate_source() {
     return 1
   }
 
-  [ -f "$SRC/references/gox-minimal.md" ] || {
-    echo "Missing references/gox-minimal.md fallback" >&2
+  [ -f "$SRC/references/00-gox.md" ] || {
+    echo "Missing references/00-gox.md" >&2
     return 1
   }
 
@@ -95,8 +104,8 @@ validate_installed() {
     return 1
   }
 
-  [ -f "$dest/references/gox-minimal.md" ] || {
-    echo "Install validation failed: missing $dest/references/gox-minimal.md" >&2
+  [ -f "$dest/references/00-gox.md" ] || {
+    echo "Install validation failed: missing $dest/references/00-gox.md" >&2
     return 1
   }
 

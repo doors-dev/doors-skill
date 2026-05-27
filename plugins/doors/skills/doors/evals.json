@@ -7,6 +7,7 @@
       "prompt": "In this Doors app, add a debounced search input that updates results as the user types without sending every keystroke.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/09-events.md",
         "references/11-scopes.md",
         "references/12-indication.md",
@@ -24,6 +25,7 @@
       "prompt": "Add a reactive counter component to a Doors page using Source so only the displayed count updates when the button is clicked.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/06-state.md",
         "references/08-components.md",
         "references/09-events.md"
@@ -37,10 +39,27 @@
       ]
     },
     {
+      "id": "static-data-component",
+      "prompt": "Add a static repeated content section with several blocks, each with title, body text or markup, and a small list of items, to an existing Doors page.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/00-gox.md",
+        "references/08-components.md"
+      ],
+      "grading_assertions": [
+        "Models each repeated block as a component struct with fields and a Main method rather than loose per-field variables rendered in a parent template.",
+        "Keeps the template shape inside the component and passes data through composite literals, constructor/factory values, or a top-level slice of component values.",
+        "Renders slices of component values with explicit GoX for/range syntax when multiple blocks are needed, leaving room for per-item wrappers/classes/attrs.",
+        "Does not recommend direct ~(contentBlocks) for typed component slices such as []ContentBlock; only treats direct slice rendering as acceptable when the slice is intentionally typed as []any or []gox.Comp.",
+        "Uses fields such as string, []string, or any for variable text/markup and does not mix hardcoded list items with unrelated placeholder variables in the parent template."
+      ]
+    },
+    {
       "id": "typed-route-query",
       "prompt": "Add a /reports route with an optional page query parameter and active navigation link in a Doors app.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/05-routing.md",
         "references/10-navigation.md",
         "references/12-indication.md"
@@ -60,6 +79,7 @@
       "prompt": "Refactor a Doors app whose top-level Path has Section plus detail ID, query, page, and filter fields. Keep the route model as one source of truth, but make the route hierarchy follow Doors' ladder: top-level path-model switch, narrower path-model branches, then params/query updates only in fragments that read them.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/05-routing.md",
         "references/06-state.md",
         "references/08-components.md"
@@ -80,6 +100,7 @@
       "prompt": "Refactor a dashboard Source[DashboardState] with selected tab, filters, counters, and detail data so changing a filter does not rerender the whole dashboard shell or unrelated panels.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/06-state.md",
         "references/08-components.md",
         "references/07-door.md"
@@ -97,6 +118,7 @@
       "prompt": "Review this existing Doors diff for reactive-state best-practice issues: broad Source bindings, Effect boundaries around whole panels, tab switches implemented with Bind, and state split into many unrelated sources.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/06-state.md",
         "references/07-door.md",
         "references/08-components.md"
@@ -114,6 +136,7 @@
       "prompt": "Create or refactor a Doors app entry point to mount middleware, serve static files, configure CSP/timeouts, and keep routing inside the returned root component.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/01-get-started.md",
         "references/04-app.md",
         "references/21-configuration.md",
@@ -131,6 +154,7 @@
       "prompt": "Add a lazy details panel to a Doors component that loads content only after a click and updates just that panel.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/07-door.md",
         "references/09-events.md",
         "references/03-context.md",
@@ -148,6 +172,7 @@
       "prompt": "Add email/password login and logout to a Doors app with session-backed auth state and a protected dashboard route; use the Doors skill's auth, routing, events, and state reference files before answering.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/18-storage-auth.md",
         "references/19-session-instance.md",
         "references/09-events.md",
@@ -161,7 +186,9 @@
         "Checks authorization while deciding what to render and rechecks at the service/database operation level when permissions can change.",
         "Initializes any local Source fields before Bind/Update and uses GoX ~(...) interpolation rather than JSX-style {expr}; does not render a LoginPage with a nil message Source field.",
         "Does not call path.Update, auth.Update, or other state mutations from render paths such as Bind callbacks, Effect bodies, or GoX ~{...} blocks to redirect.",
-        "Uses Route primitives for route dispatch with auth binding inside protected branches, or binds auth first only when the whole app shell is auth-gated and routes inside the authorized branch; does not use whole-path Bind, path.Get inside an auth-only Bind, or pass path sources into login components that do not read or write the route."
+        "Uses Route primitives for route dispatch with auth binding inside protected branches, or binds auth first only when the whole app shell is auth-gated and routes inside the authorized branch.",
+        "Uses RouteMatch(...).Comp(...) or RouteDefaultComp(...) for static/login branches that do not need the routed source, instead of .Source(...) with an ignored or forwarded path source.",
+        "Does not use whole-path Bind, path.Get inside an auth-only Bind, or pass a full doors.Source[Path] into any component that does not read or write the route."
       ]
     },
     {
@@ -169,6 +196,7 @@
       "prompt": "Show live job status in a Doors component by polling a backend every few seconds while the component is mounted.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/22-background-data.md",
         "references/03-context.md",
         "references/06-state.md",
@@ -179,7 +207,7 @@
         "Pushes backend updates into Source or another documented reactive primitive.",
         "Uses the correct Doors runtime context for state updates and lifecycle-bound work.",
         "Avoids unsafe mutation of plain shared Go state from the polling goroutine.",
-        "Uses GoX control flow documented by the loaded GoX reference; if only the fallback is available, does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return."
+        "Uses GoX control flow documented by the bundled GoX reference; does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return."
       ]
     },
     {
@@ -187,6 +215,7 @@
       "prompt": "Add a form that uploads a CSV file, validates it on the server, and then offers a generated report download from a Doors page.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/09-events.md",
         "references/14-resources.md",
         "references/06-state.md",
@@ -210,6 +239,7 @@
       "prompt": "Serve embedded images and a CSS file from a Doors app, with cache headers and CSP configured correctly.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/04-app.md",
         "references/14-resources.md",
         "references/16-styles.md",
@@ -224,9 +254,10 @@
     },
     {
       "id": "javascript-action-bridge",
-      "prompt": "Add a browser-side toast event from a Doors handler and wire a small JavaScript module that can call back into Go.",
+      "prompt": "Add a browser-side toast event from a Doors handler and wire a small JavaScript module that can call back into Go. The page may render multiple copies of this component, so any JavaScript element lookup must avoid ID collisions.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/15-javascript.md",
         "references/13-actions.md",
         "references/09-events.md",
@@ -237,6 +268,8 @@
         "Uses the documented managed script or module shape for browser-side JavaScript.",
         "Uses AHook or the documented JS-to-Go hook API when JavaScript must call back into Go.",
         "Attaches AHook/AData to the managed script that calls $hook/$data, or imports module code from that managed script.",
+        "Uses document.currentScript.parentElement.querySelector/querySelectorAll for colocated inline-script DOM islands, falling back to document.currentScript.closest(...) when the target wrapper is not the direct parent, or passes a selector-compatible ID through markup/data when a real cross-script handle is required: doors.IDRand() for unique per-render IDs or doors.IDString(stableUniqueValue) for deterministic IDs from component data such as title, slug, or URL.",
+        "Does not hardcode reusable component IDs such as modal/root/toast target IDs in a way that collides when the component is rendered more than once.",
         "Accounts for CSP/esbuild configuration when modules or external scripts are introduced."
       ]
     },
@@ -245,6 +278,7 @@
       "prompt": "Set a dynamic page title, return 404 for an unknown route, and sync a disabled attribute across a group of controls in a Doors page.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/20-head-status.md",
         "references/17-shared-attr.md",
         "references/05-routing.md",
@@ -255,7 +289,7 @@
         "Sets initial HTTP status from the rendered route fallback.",
         "Uses AShared when one attribute should be shared across multiple elements.",
         "Keeps route fallback behavior separate from authorization decisions.",
-        "Uses GoX control flow documented by the loaded GoX reference; if only the fallback is available, does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return.",
+        "Uses GoX control flow documented by the bundled GoX reference; does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return.",
         "Does not call AShared Enable/Disable from a render block merely to correct initial attribute state."
       ]
     },
@@ -264,6 +298,7 @@
       "prompt": "Add two related save controls where normal edits may debounce, the final save must wait for pending edits, stale responses should not control the UI, and the user sees pending/error feedback.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/11-scopes.md",
         "references/12-indication.md",
         "references/13-actions.md",
@@ -283,6 +318,7 @@
       "prompt": "Review this Doors diff for security issues around route params, active links, hidden inputs, and auth checks.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/05-routing.md",
         "references/18-storage-auth.md",
         "references/19-session-instance.md"
@@ -296,19 +332,49 @@
     },
     {
       "id": "gox-template-edit",
-      "prompt": "Edit a Doors .gox component to add a conditional empty state, a loop of results, and a click handler.",
+      "prompt": "Edit a Doors .gox component to add a conditional empty state with plain text in both branches, a loop of results, a status branch that would normally tempt a switch placeholder, and a click handler.",
       "must_trigger": true,
       "expected_references": [
-        "https://raw.githubusercontent.com/doors-dev/gox/refs/heads/main/llms.md",
-        "references/gox-minimal.md",
+        "references/00-gox.md",
         "references/09-events.md"
       ],
       "grading_assertions": [
-        "Reads the official GoX reference before editing .gox when network access is available.",
-        "Falls back to references/gox-minimal.md if the official GoX reference is unreachable.",
+        "Reads the bundled Doors-specific GoX LLM reference, references/00-gox.md, before editing or reviewing Doors code.",
         "Edits the .gox source and does not manually edit generated .x.go files.",
         "Uses GoX control flow and Doors event attrs with valid modifier or proxy syntax.",
-        "If only the fallback reference is available, uses documented if/for placeholders, or a ~func inline expression whose switch cases return, instead of inventing unsupported placeholder forms."
+        "Does not wrap plain text branches in empty fragments such as <>text</> inside ~(if); writes text directly or uses real markup when markup is needed.",
+        "Uses documented if/for placeholders, or a ~func inline expression whose switch cases return, instead of inventing unsupported placeholder forms."
+      ]
+    },
+    {
+      "id": "gox-escape-literals",
+      "prompt": "Edit a Doors .gox component so visible copy includes a literal tilde character and an unmatched closing brace.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/00-gox.md"
+      ],
+      "grading_assertions": [
+        "Reads references/00-gox.md before editing GoX syntax.",
+        "Renders a literal tilde as ~\"~\" rather than leaving raw template text that GoX parses as an escape.",
+        "Renders an unmatched closing brace as ~\"}\" rather than leaving raw template text that GoX treats as unbalanced syntax.",
+        "Edits the .gox source and regenerates generated files instead of hand-editing .x.go."
+      ]
+    },
+    {
+      "id": "doors-gox-helper-analogs",
+      "prompt": "Review and fix a Doors .gox diff that imports goxx for class composition, wraps a Bind with parallel rendering, and uses a proxy helper to add data-testid through a Button component.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/00-gox.md",
+        "references/16-styles.md",
+        "references/06-state.md",
+        "references/07-door.md"
+      ],
+      "grading_assertions": [
+        "Removes goxx from the Doors app and uses Doors-native helpers instead.",
+        "Replaces class composition with doors.Class and uses it correctly as a class value, attribute modifier, or proxy.",
+        "Uses doors.ProxyMod or a built-in Doors attr proxy when an attribute must pass through a component/container to the first real element.",
+        "Uses doors.Parallel only for independent static render fragments with expensive DB/API work, not in front of Source/Beam Bind, Effect, Route, or doors.Door rendering."
       ]
     },
     {
@@ -316,6 +382,7 @@
       "prompt": "Design tests for a Doors app change that adds pure validation logic, a click handler that updates Source-backed UI, an ALink navigation flow with browser back, and a repository query. Include how you would use Rod during development if no browser controller is available.",
       "must_trigger": true,
       "expected_references": [
+        "references/00-gox.md",
         "references/23-testing.md",
         "references/09-events.md",
         "references/10-navigation.md",

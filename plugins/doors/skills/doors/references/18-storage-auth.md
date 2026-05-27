@@ -116,7 +116,7 @@ If the whole app shell requires authorization, it is also fine to bind auth firs
         ~(NewLoginPage(auth))
     } else {
         ~(path.Route(
-            doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard }).Source(Dashboard),
+            doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard }).Comp(Dashboard{}),
             doors.RouteDefaultComp[Path](HomePage{}),
         ))
     })

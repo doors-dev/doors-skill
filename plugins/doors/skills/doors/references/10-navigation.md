@@ -115,7 +115,7 @@ Works wherever `Model` is accepted (`ALink`, `ActionLocationAssign`, `ActionLoca
 
 ## Hard Navigation (Actions)
 
-Full page loads that bypass the Doors runtime. Use only when you intentionally need a full browser navigation — e.g., redirecting to an external site, or recovering from a fatal error. For normal in-app navigation after form submissions or user actions, update the route source instead (see "Navigate after form success" in `SKILL.md`).
+Full page loads that bypass the Doors runtime. Use only when you intentionally need a full browser navigation — e.g., redirecting to an external site, or recovering from a fatal error. For normal in-app navigation after form submissions or user actions, update the route source instead.
 
 ```go
 doors.ActionLocationReload{}                              // reload current page

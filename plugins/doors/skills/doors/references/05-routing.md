@@ -172,12 +172,12 @@ Keep one typed path source of truth, but route and subscribe at the narrowest le
 
 1. **Top level:** `doors.Route(doors.RouteModel(...), fallback)` chooses the path model. If broad state has global effects (auth shell, layout, head/status), handle it at that owner.
 2. **Segment/page switch:** inside a path model, use `path.Route(...)` with `RouteMatch`, `RouteDerive`, `RouteValue`, and defaults. This switch should be minimal.
-3. **Branch data:** pass the path source to a branch only when it needs to write the path; otherwise use `RouteDerive(...).Beam(...)` / `.Source(...)` to pass the smaller route value.
+3. **Branch data:** pass the path source to a branch only when it needs to write the path; otherwise use `RouteDerive(...).Beam(...)` for read-only smaller route values, or `RouteDerive(...).Source(set, render)` only when the child writes that derived value back.
 4. **Params/query:** bind or effect params, query, filters, and pagination inside the page fragments that actually render them.
 
-`.Route` is not just syntactic branching. It subscribes to the routed value but swaps the door only when the matched route changes. `Bind` and `Effect` rerender on subscribed value changes; derive first when they should react to only one field.
+`.Route` is not just syntactic branching. It subscribes to the routed value but swaps the door only when the matched route changes. `Bind` and `Effect` rerender on subscribed value changes; derive first when they should react to only one field. Direct path binds are usually not needed for routing.
 
-Direct path binds are usually not needed for routing. Avoid this top-level dispatch because it rerenders on every `Path` change, including unrelated query or param updates:
+Avoid this top-level dispatch because it rerenders on every `Path` change, including unrelated query or param updates:
 
 ```gox
 elem Page(path doors.Source[Path]) {
@@ -212,9 +212,7 @@ If a branch only needs a derived route value, pass that value instead of the who
 ))
 ```
 
-Use `.Source(set, render)` on `RouteDerive` only when the child must write the derived value back into the parent path model.
-
-Do not use `RouteValue(Path{...})` on whole path models that contain pointers, slices, maps, `url.Values`, or query fields. It either will not compile or will compare the wrong thing. Match a comparable route enum, predicate, or derived value.
+Use `.Source(set, render)` on `RouteDerive` only when the child must write the derived value back into the parent path model. Do not use `RouteValue(Path{...})` on whole path models that contain pointers, slices, maps, `url.Values`, or query fields. It either will not compile or will compare the wrong thing. Match a comparable route enum, predicate, or derived value.
 
 ### Source/Beam-Level Routing
 

@@ -107,6 +107,42 @@ elem (l navLink) Main() {
 }
 ```
 
+### Static Data Components
+
+When a repeated/static block has one template shape plus variable data, make the block a component with fields. Do not leave a parent template with loose per-field variables for some text while other parts of the same block stay hardcoded; that mixes template structure and data ownership.
+
+```gox
+type ContentBlock struct {
+    Title string
+    Body  any
+    Items []string
+}
+
+elem (b ContentBlock) Main() {
+    <div>
+        <h2>~(b.Title)</h2>
+        <div>~(b.Body)</div>
+        <ul>
+            ~(for _, item := range b.Items {
+                <li>~(item)</li>
+            })
+        </ul>
+    </div>
+}
+
+var contentBlocks = []ContentBlock{
+    {Title: "Authentication", Body: "Session-backed access", Items: []string{"Sign in", "Protected sections"}},
+}
+
+elem ContentBlocks() {
+    ~(for _, block := range contentBlocks {
+        <section class="content-block">~(block)</section>
+    })
+}
+```
+
+For one item, render the literal directly: `~ContentBlock{Title: "Authentication", Body: "...", Items: []string{"Sign in"}}`. For many items, prefer the explicit `for/range`; it is clearer and lets each component have wrappers, classes, IDs, or per-item attrs. Direct `~(items)` is valid only for intentionally typed render slices such as `[]any` or `[]gox.Comp`, not as the default for a typed component slice like `[]ContentBlock`.
+
 ### State ownership
 
 - **Local**: create `Source` in the constructor, store on struct field
@@ -138,7 +174,7 @@ Wrap a component in `<>...</>` to force re-initialization on each navigation —
         Comp(<>
             ~(LocationSelector(func(ctx context.Context, city int) { ... }))
         </>),
-    doors.RouteDefault(WeatherDashboard),
+    doors.RouteDefaultComp[Path](WeatherDashboard{}),
 ))
 ```
 

@@ -59,6 +59,44 @@ Auto-detected request body: `undefined`→no body, `FormData`→multipart, `URLS
 
 `$data`, `$hook`, and `$fetch` read attrs from the managed script element they run on. Attach `AData`, `AHook`, or `ARawHook` to that same managed inline script, or to the `src` script marked `inline`; a separate module script does not inherit those helpers from another script element.
 
+## Finding Local Elements
+
+When JavaScript needs elements from the component it is rendered with, avoid global IDs first. Put the script inside the component wrapper and query from `document.currentScript.parentElement`:
+
+```gox
+<div class="picker">
+    <button data-pick="a">A</button>
+    <button data-pick="b">B</button>
+    <script>
+        const root = document.currentScript.parentElement
+        const buttons = root.querySelectorAll("[data-pick]")
+    </script>
+</div>
+```
+
+Use this for colocated inline scripts whose target elements are siblings under the same wrapper. If the script is nested deeper or the nearest meaningful wrapper is not the direct parent, use `document.currentScript.closest(".component-class")`. Both forms keep repeated components independent and avoid ID collisions.
+
+When code outside that local script needs a real ID, generate it on the server and pass it through markup/data. Use `doors.IDRand()` for a unique per-render ID, or `doors.IDString(value)` for a stable ID derived from a component property such as title, slug, or URL. For `IDString`, pick a value that is unique in that rendered scope. Both helpers produce selector-compatible IDs.
+
+```gox
+~{ panelID := doors.IDRand() }
+<section id=(panelID)>
+    ...
+</section>
+<script data:panelID=(panelID)>
+    const panel = document.querySelector("#" + $data("panelID"))
+</script>
+```
+
+Use a stable ID when the same logical item should keep the same handle across renders:
+
+```gox
+~{ headingID := doors.IDString(article.URL) }
+<h2 id=(headingID)>~(article.Title)</h2>
+```
+
+Do not hardcode reusable component IDs such as `id="modal"` or `id="root"` inside components that can appear more than once. Prefer `document.currentScript.parentElement.querySelector(...)` or `document.currentScript.closest(...)` for local behavior, `doors.IDRand()` for unique per-render handles, or `doors.IDString(...)` for deterministic handles from stable data.
+
 ## Hooks (JS→Go)
 
 ### Typed

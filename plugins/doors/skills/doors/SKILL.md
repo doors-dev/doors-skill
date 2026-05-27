@@ -1,6 +1,6 @@
 ---
 name: doors
-description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, and framework-specific conventions. When touching .gox files, writing GoX snippets, or using GoX tooling, read the GoX LLM reference first and use the bundled minimal GoX fallback if that URL is unavailable.
+description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Always read the bundled Doors-specific GoX reference first. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, GoX, and framework-specific conventions.
 license: Apache-2.0
 metadata:
   version: "0.1.4"
@@ -15,38 +15,25 @@ Use this skill as the entry point for Doors-specific work. Keep this file as an 
 
 ## Boundary With GoX
 
-Doors apps commonly use GoX templates, but this skill does not teach GoX syntax.
+Doors apps use GoX templates for almost all rendered UI, so always load the bundled Doors-specific GoX reference before applying Doors-specific guidance.
 
-When a task touches `.gox` files, template authoring, GoX snippets/examples, generated `.x.go` files, GoX formatting, GoX generation, GoX compile errors, or GoX CLI/module compatibility, first read the GoX LLM reference:
-
-- `https://raw.githubusercontent.com/doors-dev/gox/refs/heads/main/llms.md`
-
-Follow that reference for `.gox` authoring rules, generated-file handling, `gox fmt`, `gox gen`, `gox ver`, and editor/tooling expectations.
-
-If the URL is unreachable or network access is unavailable, read `references/gox-minimal.md` before editing `.gox` files. Treat it as an offline safety net: it covers only the common syntax and workflow needed for Doors work, so prefer the remote GoX reference whenever it can be fetched.
-
-When using the fallback, only `~(if ... { ... })` and `~(for ... { ... })` are documented template control flow. Do not write `~(switch ...)`; use an `if`/`else if` chain, or use `~func { switch ... }` where each case returns.
-
-Do not use the `goxx` extension package in Doors apps; it is not compatible. Use Doors helpers instead, which cover the common helper patterns used in Doors apps.
+Read `references/00-gox.md` first for every Doors task, including reviews. This is non-optional; do not answer or edit from GoX memory.
 
 ## First Pass Workflow
-
 Before editing a Doors project:
 
-1. Inspect the existing project structure and conventions; audit current Doors code for routing, state, lifecycle, auth, event, and resource best-practice issues before editing.
-2. Check `go.mod` for `github.com/doors-dev/doors`.
-3. If editing, reviewing, or writing `.gox` snippets, read the GoX LLM reference first.
+1. Read `references/00-gox.md`.
+2. Inspect the existing project structure and conventions; audit current Doors code for routing, state, lifecycle, auth, event, and resource best-practice issues before editing.
+3. Check `go.mod` for `github.com/doors-dev/doors`.
 4. Identify the smallest Doors domain involved: app setup, routing, state, components, events, doors, resources, JavaScript, styles, auth, sessions, background data, or configuration.
 5. Read matching `references/` files from the map below; `./docs` and code fact-check them, not replace them.
 6. Prefer local edits that fit existing routing, state, styling, and auth patterns.
-7. Do not edit generated `.x.go` files.
-8. When browser/runtime behavior is unclear and no reliable browser controller is available, use a short Rod check or temporary Go test to inspect the real page. Convert it into a committed e2e test when it verifies user-facing behavior or prevents a regression; delete it when it was only exploratory. Do not use Rod for pure logic that ordinary Go tests cover.
-9. Run or suggest `gox fmt`, `gox gen`, and `go test ./...` when appropriate for the change.
+7. When browser/runtime behavior is unclear and no reliable browser controller is available, use a short Rod check or temporary Go test to inspect the real page. Convert it into a committed e2e test when it verifies user-facing behavior or prevents a regression; delete it when it was only exploratory. Do not use Rod for pure logic that ordinary Go tests cover.
+8. Run or suggest the appropriate formatting, generation, and test commands for the change.
 
 Ask the user only for product requirements that cannot be inferred from the code, such as unknown URL shape, ambiguous app section, missing data fields, permissions policy, destructive behavior, or deployment settings.
 
 ## Core Mental Model
-
 - Each interactive page is a live server-side instance. There is no virtual DOM.
 - Components are static by default: `Main()` renders once and stays. Re-rendering is explicit and targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
 - State derivation replaces virtual DOM diffing. For all reactive state, use a ladder: branch key owned at that level (often derived), narrower branches, then field/param/query binds only in consuming fragments.
@@ -72,12 +59,11 @@ Key primitives:
 | Hook attrs (`AClick`, `AInput`, `ASubmit`, etc.) | Server-bound DOM events |
 
 ## Reference Map
-
-Read references by task, not all at once.
+After `references/00-gox.md`, read remaining references by task, not all at once.
 
 | Task | Read |
 |------|------|
-| Work on `.gox` files or GoX snippets when the GoX LLM reference URL is unavailable | `references/gox-minimal.md` |
+| Always read before any Doors work | `references/00-gox.md` |
 | Create a project, inspect starter layout, or add static files | `references/01-get-started.md`, `references/04-app.md`, `references/21-configuration.md` |
 | Work with app creation, middleware, mounting, static dirs, or resources at fixed paths | `references/04-app.md` |
 | Choose the right context, start goroutines, wait on X* methods, or handle detached work | `references/03-context.md` |
@@ -102,100 +88,11 @@ Read references by task, not all at once.
 | Push data from background sources such as polling, Kafka, or Watermill into reactive state | `references/22-background-data.md`, `references/03-context.md` |
 | Test a Doors app or design an app-level e2e test harness | `references/23-testing.md` |
 
-## Quick Pattern: Interactive Elements
+## Interaction Defaults
 
-Read `09-events`, `11-scopes`, `12-indication`, `13-actions` for full options.
+Read `09-events`, `11-scopes`, `12-indication`, and `13-actions` before changing interactive elements. Use Doors event attrs for normal browser events, scopes for request scheduling, indication for request lifecycle feedback, and actions only when the browser must do something imperative.
 
-Hook attrs can be attached two ways: modifier `(doors.AClick{...})` inside the tag, or proxy `~>doors.AClick{...}` before the element. Both are equivalent. Modifier is more explicit; proxy keeps the tag clean with many fields and drills through wrapping components.
-
-### Click handler
-
-```gox
-<button (doors.AClick{
-    On: func(ctx context.Context, _ doors.RequestPointer) bool {
-        // mutate state, update a Door, etc.
-        return false
-    },
-})>Click Me</button>
-```
-
-### Input with reactive state
-
-```gox
-~{ input := doors.NewSource("") }
-<input (doors.AInput{
-    On: func(ctx context.Context, r doors.RequestInput) bool {
-        input.Update(ctx, r.Event().Value)
-        return false
-    },
-}) type="text">
-~(input.Bind(results))
-
-elem results(query string) {
-    // render based on query
-}
-```
-
-### Navigation link
-
-```gox
-~>doors.ALink{Model: path, Indicator: loader} <a>Link</a>
-```
-
-With current-page highlighting:
-
-```gox
-~>doors.ALink{
-    Model:     path,
-    Indicator: loader,
-    Active:    doors.Active{Indicator: doors.IndicateClass("active")},
-} <a>Link</a>
-```
-
-### Full lifecycle (scope + indicator + actions)
-
-When overlap or latency matters:
-
-```gox
-<button (doors.AClick{
-    Scope:     &doors.ScopeBlocking{},
-    Indicator: doors.IndicateAttr("aria-busy", "true"),
-    Before:    doors.ActionScroll{Selector: "#top"},
-    OnError:   doors.ActionIndicate{
-        Indicator: doors.IndicateClass("error"),
-        Duration:  300 * time.Millisecond,
-    },
-    On: func(ctx context.Context, r doors.RequestPointer) bool {
-        r.After(doors.ActionScroll{Selector: "#result"})
-        doors.Call(ctx, doors.ActionEmit{Name: "toast", Arg: "Saved"})
-        return false
-    },
-})>Save</button>
-```
-
-### Navigate after form success
-
-After a successful form submission, update the route source — the page re-routes in place. Do not use hard navigation actions for this.
-
-```gox
-~>doors.ASubmit[loginData]{
-    Scope:     new(doors.ScopeBlocking),
-    Indicator: doors.IndicateAttr("aria-busy", "true"),
-    On: func(ctx context.Context, r doors.RequestForm[loginData]) bool {
-        err := auth.Login(r, r.Data().Email, r.Data().Password)
-        if err != nil {
-            message.Update(ctx, "Invalid credentials")
-            return false
-        }
-        path.Update(ctx, Path{Route: Dashboard})
-        return true
-    },
-} <form>
-    <input name="email" type="email">
-    <input name="password" type="password">
-    <button type="submit">Login</button>
-</form>
-```
+After successful form flows, prefer updating the route source so the page reroutes in place. Do not use hard navigation actions for ordinary in-app transitions.
 
 ## Implementation Defaults
 
@@ -209,7 +106,7 @@ The function passed to `NewApp` is a per-request page factory, not the router. U
 
 - Rendering and state propagation happen on the Doors runtime. It's normal to query DB or call APIs while rendering.
 - Dynamic containers render on the instance goroutine pool by default.
-- Use `doors.Parallel()` to render independent slow fragments concurrently.
+- Use `doors.Parallel()` only for independent slow render fragments. Do not put it in front of `Bind`, `Effect`, `Route`, or `doors.Door` rendering; dynamic containers already render on the instance goroutine pool.
 - Use `doors.Go(f)` for background work scoped to a rendered subtree's lifetime.
 - Treat dynamic subtrees as runtime-managed. Direct DOM work is possible but should complement the runtime, not race against it.
 
@@ -227,11 +124,11 @@ Keep identifiers, filters, pagination, selection, route values, and small UI sta
 
 Treat source values as immutable. If a source holds a slice, map, pointer, or mutable struct, replace it with a new value instead of mutating it in place. Apply the granularity ladder to all state, not only URLs: route on branch keys, derive fields, and bind/effect only where consumed.
 
-Render functions, including `Bind` callbacks, `Effect` bodies, and `~{...}` blocks in `elem` rendering, should render from current state rather than perform route changes or other state mutations. For navigation, update the route source from event handlers, app factory/bootstrap code, or another runtime-managed side-effect path.
+Render callbacks should render from current state rather than perform route changes or other state mutations. For navigation, update the route source from event handlers, app factory/bootstrap code, or another runtime-managed side-effect path.
 
 ### Context
 
-Inside `elem` blocks and `~{ ... }` code blocks, `ctx context.Context` is implicitly in scope. It is the Doors runtime context.
+Use the Doors runtime context provided by render code and handlers; see `references/00-gox.md` and `references/03-context.md` for where it is in scope.
 
 Handlers receive their own `ctx`; use that handler context inside handlers.
 
@@ -239,9 +136,7 @@ Use the Doors-provided context for state reads/updates, hooks, links, session/in
 
 ### Components
 
-In these docs, "component" means anything satisfying `gox.Comp`: struct components with `Main()`, plain `elem` functions, and Doors helpers such as `Bind`, `Route`, `RouteBeam`, and `Go`.
-
-Both struct and `elem` styles can hold state. Structs are usually better for significant state or multiple methods.
+Components can hold state. Struct components are usually better for significant state or multiple methods.
 
 ## Security & Correctness Rules
 
@@ -278,9 +173,9 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 
 ## Reference Inventory
 
-- `references/gox-minimal.md` - offline fallback for common GoX template syntax and workflow
+- `references/00-gox.md` - bundled Doors-specific GoX reference
 - `references/01-get-started.md` - project setup, starter clone, minimal project, project structure
-- `references/03-context.md` - implicit GoX ctx, Session/Instance/Detached contexts, API compatibility tables
+- `references/03-context.md` - Doors runtime context, Session/Instance/Detached contexts, API compatibility tables
 - `references/04-app.md` - `NewApp`, middleware, `UseFS`, `UseDir`, `UseResource`, cache constants, mounting
 - `references/05-routing.md` - path models, params, query, `Route`, `RouteModel`, `Location`
 - `references/06-state.md` - `Source`, `Beam`, `Bind`, `Effect`, `Sub`, derivation, consistency, skipping
@@ -291,7 +186,7 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 - `references/11-scopes.md` - blocking, serial, debounce, latest, frame, concurrent, sharing, pipelines
 - `references/12-indication.md` - indicators, selectors, combining, `ActionIndicate`
 - `references/13-actions.md` - `Call`, `XCall`, `ActionEmit`, `ActionScroll`, `ActionIndicate`, location actions
-- `references/14-resources.md` - `ResourceFS`, `ResourceBytes`, modifier syntax, cache/type/name, external resources
+- `references/14-resources.md` - `ResourceFS`, `ResourceBytes`, resource attrs, cache/type/name, external resources
 - `references/15-javascript.md` - managed scripts, `AHook`, `$hook`, `$data`, `$on`, modules, esbuild
 - `references/16-styles.md` - class helper, stylesheet resources, raw/private styles
 - `references/17-shared-attr.md` - `AShared`, `NewAShared`, `Enable`, `Disable`, `Update`
