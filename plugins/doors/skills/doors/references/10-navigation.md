@@ -2,6 +2,8 @@
 
 In-app navigation without full page reload.
 
+> **Important**: Do not use raw `href` on `<a>` elements for in-app navigation — always use `doors.ALink` to avoid full page reloads.
+
 ## ALink
 
 Declarative navigation on `<a>` elements:

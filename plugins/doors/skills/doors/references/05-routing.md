@@ -85,6 +85,8 @@ Matched variant's field becomes `true`. When encoding, first `true` variant in f
 - **Int** — compact for many variants, exhaustive switches via `iota` constants, implicit order
 - **Bool** — explicit names (`Path{Docs: true}`), natural for ≤3 variants, single-pattern models
 
+> **Pitfall**: Keep path models to ≤6 route variants. If you need more, split into separate smaller models by area.
+
 ### Normalization
 
 - Slashes: `"/docs"`, `"docs"`, `"/docs/"` all equivalent
