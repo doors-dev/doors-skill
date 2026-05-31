@@ -3,7 +3,7 @@ name: doors
 description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Always read the bundled Doors-specific GoX reference first. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, GoX, and framework-specific conventions.
 license: Apache-2.0
 metadata:
-  version: "0.1.7"
+  version: "0.1.8"
   language: go
 ---
 
@@ -75,7 +75,7 @@ After `references/00-gox.md`, read remaining references by task, not all at once
 | Add click/input/change/submit/key/focus handlers or forms | `references/09-events.md`, `references/11-scopes.md`, `references/12-indication.md`, `references/13-actions.md` |
 | Add navigation links, active links, or programmatic navigation | `references/10-navigation.md`, `references/12-indication.md` |
 | Add loading/pending feedback during requests (indicators, CSS classes, attributes) | `references/12-indication.md` |
-| Control request scheduling: prevent double-clicks, debounce, queue, cancel stale | `references/11-scopes.md` |
+| Control request scheduling: prevent double-clicks, rate-limit, debounce, queue, cancel stale | `references/11-scopes.md` |
 | Run browser-side actions before/after/on-error, emit JS events, scroll, or hard navigate | `references/13-actions.md` |
 | Serve images, downloads, embedded files, or external URLs | `references/14-resources.md` |
 | Add inline scripts, managed scripts, JS modules, Go-to-JS data, or JS-to-Go hooks | `references/15-javascript.md` |

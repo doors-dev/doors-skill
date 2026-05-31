@@ -7,6 +7,7 @@ Client-side request scheduling. Control what happens when events overlap.
 - Prevent double-clicks on submit buttons
 - Queue repeated actions
 - Debounce typing
+- Rate-limit continuous input to a fixed interval
 - Make one action wait for a related group
 - Drop stale in-flight work
 
@@ -21,7 +22,7 @@ type Scopes interface {
 }
 ```
 
-`ScopeBlocking`, `ScopeSerial`, `ScopeDebounce`, and `ScopeLatest` implement `Scopes` directly. `ScopeFrame` and `ScopeConcurrent` are factories; call `.Scope(...)` to get a `Scopes` value. Combine scopes with `.And(...)` or `JoinScopes(...)`.
+`ScopeBlocking`, `ScopeSerial`, `ScopeRate`, `ScopeDebounce`, and `ScopeLatest` implement `Scopes` directly. `ScopeFrame` and `ScopeConcurrent` are factories; call `.Scope(...)` to get a `Scopes` value. Combine scopes with `.And(...)` or `JoinScopes(...)`.
 
 ## Scope Types
 
@@ -43,6 +44,18 @@ Queue accepted events, run one after another. First starts immediately; later ev
 ```go
 scope := &doors.ScopeSerial{}
 ```
+
+### ScopeRate
+
+Throttle events to a minimum interval. First fires immediately; later events wait for `Tick`. Keeps only the latest pending event during cooldown.
+
+```go
+scope := &doors.ScopeRate{
+    Tick: 500 * time.Millisecond, // minimum interval
+}
+```
+
+Use for continuous input where you want a fixed server-call rate (e.g. mouse move). Unlike debounce, rate does not delay the first event and does not reset its cooldown on new arrivals. Unlike serial, rate holds only the latest pending event, not a queue.
 
 ### ScopeDebounce
 
@@ -123,6 +136,7 @@ Each scope sees the event only after the previous accepted it.
 - Not a backend permission or one-shot guarantee
 - Pair with indication for polished UX
 - `ScopeBlocking` is the simplest "prevent double-submit"
+- `ScopeRate` throttles events to a fixed minimum interval; first fires immediately, cooldown is not reset by new arrivals
 - `ScopeLatest` cancels in-flight indication and client-side work, but the request may already have been sent and will reach the server regardless
 
 ## Related
