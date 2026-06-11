@@ -32,6 +32,7 @@ type Conf struct {
     ServerDisableGzip             bool
     ServerSessionCookiePrefix     string // cookie prefix (e.g. __Host-)
     ServerSessionCookieNoSecure   bool   // omit Secure (dev only)
+    ServerIDCookieName            string // sticky-session cookie name (empty = off)
     ServerRequestBodyLimit        int    // max request body bytes for hooks/forms; also max memory for ASubmit (default 8 MB)
 
     // Solitaire transport tuning (rarely needed)
