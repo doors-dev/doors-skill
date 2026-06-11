@@ -16,7 +16,7 @@ GoX compiles `.gox` templates to `.go`. Write HTML-like templates as typed Go ex
 
 ## Prerequisites
 
-Run `gox ver` first — it must print a version (e.g. `v0.1.27`). Without `gox` on `PATH`, generation fails and builds error with `undefined: example` for every template.
+Run `gox ver` first — it must print a version (e.g. `v0.1.36`). Without `gox` on `PATH`, generation fails and builds error with `undefined: example` for every template.
 
 Install:
 - **Prebuilt binary (recommended):** download from [GitHub Releases](https://github.com/doors-dev/gox/releases), put on `PATH`.

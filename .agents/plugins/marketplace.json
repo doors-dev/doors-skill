@@ -8,7 +8,7 @@
       "name": "doors",
       "source": {
         "source": "local",
-        "path": "./plugins/doors"
+        "path": "./packaging/claude-code-plugin/plugins/doors"
       },
       "description": "Always use for any Doors project work. Covers the Go server-side UI framework, reactive state, typed routing, events, auth, sessions, resources, and GoX template boundaries.",
       "policy": {

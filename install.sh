@@ -3,11 +3,12 @@ set -euo pipefail
 
 SKILL_NAME="doors"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC="$ROOT/plugins/doors/skills/$SKILL_NAME"
+SKILL_SOURCE="$ROOT/skills/$SKILL_NAME"
+PLUGIN_PACKAGE="$ROOT/packaging/claude-code-plugin"
+PLUGIN_SKILL_COPY="$PLUGIN_PACKAGE/plugins/$SKILL_NAME/skills/$SKILL_NAME"
 
 json_check() {
   local file="$1"
-
   if command -v python3 >/dev/null 2>&1; then
     python3 -m json.tool "$file" >/dev/null
   fi
@@ -18,7 +19,7 @@ validate_eval_coverage() {
     return 0
   fi
 
-  python3 - "$SRC" <<'PY'
+  python3 - "$SKILL_SOURCE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -64,35 +65,46 @@ PY
 }
 
 validate_source() {
-  [ -d "$SRC" ] || {
-    echo "Missing source skill directory: $SRC" >&2
+  [ -d "$SKILL_SOURCE" ] || {
+    echo "Missing source skill directory: $SKILL_SOURCE" >&2
     return 1
   }
 
-  [ -f "$SRC/SKILL.md" ] || {
-    echo "Missing SKILL.md in $SRC" >&2
+  [ -f "$SKILL_SOURCE/SKILL.md" ] || {
+    echo "Missing SKILL.md in $SKILL_SOURCE" >&2
     return 1
   }
 
-  [ -f "$SRC/references/00-gox.md" ] || {
+  [ -s "$SKILL_SOURCE/SKILL.md" ] || {
+    echo "SKILL.md is empty" >&2
+    return 1
+  }
+
+  [ -f "$SKILL_SOURCE/references/00-gox.md" ] || {
     echo "Missing references/00-gox.md" >&2
     return 1
   }
 
-  [ -f "$SRC/evals.json" ] || {
+  [ -f "$SKILL_SOURCE/evals.json" ] || {
     echo "Missing evals.json" >&2
     return 1
   }
 
-  json_check "$SRC/evals.json"
-  json_check "$ROOT/plugins/doors/.codex-plugin/plugin.json"
-  json_check "$ROOT/plugins/doors/.claude-plugin/plugin.json"
+  json_check "$SKILL_SOURCE/evals.json"
+  json_check "$PLUGIN_PACKAGE/plugins/$SKILL_NAME/.codex-plugin/plugin.json" 2>/dev/null || true
+  json_check "$PLUGIN_PACKAGE/plugins/$SKILL_NAME/.claude-plugin/plugin.json"
   json_check "$ROOT/.agents/plugins/marketplace.json"
-  json_check "$ROOT/.claude-plugin/marketplace.json"
+  json_check "$PLUGIN_PACKAGE/.claude-plugin/marketplace.json"
   validate_eval_coverage
 
-  grep -q '^name: doors$' "$SRC/SKILL.md"
-  grep -q '^description:' "$SRC/SKILL.md"
+  grep -q '^name: doors$' "$SKILL_SOURCE/SKILL.md"
+  grep -q '^description:' "$SKILL_SOURCE/SKILL.md"
+
+  # Ensure no old source path still exists outside packaging
+  if [ -d "$ROOT/plugins/doors/skills/doors" ]; then
+    echo "ERROR: Old source path plugins/doors/skills/doors still exists. Remove it." >&2
+    return 1
+  fi
 }
 
 validate_installed() {
@@ -123,10 +135,27 @@ install_skill() {
 
   validate_source
   mkdir -p "$dest"
-  cp -R "$SRC/." "$dest/"
+  cp -R "$SKILL_SOURCE/." "$dest/"
 
   echo "Installed $SKILL_NAME to $dest"
   validate_installed "$dest_root"
+}
+
+package_plugin() {
+  echo "Generating plugin package from source skill..."
+
+  rm -rf "$PLUGIN_SKILL_COPY"
+  mkdir -p "$PLUGIN_SKILL_COPY/references"
+  cp "$SKILL_SOURCE/SKILL.md" "$PLUGIN_SKILL_COPY/"
+  cp "$SKILL_SOURCE/evals.json" "$PLUGIN_SKILL_COPY/"
+  cp "$SKILL_SOURCE/references/"*.md "$PLUGIN_SKILL_COPY/references/"
+
+  if [ -f "$PLUGIN_SKILL_COPY/SKILL.md" ]; then
+    echo "Plugin package generated at $PLUGIN_SKILL_COPY"
+  else
+    echo "ERROR: Plugin package generation failed - missing SKILL.md" >&2
+    return 1
+  fi
 }
 
 validate_all_targets() {
@@ -136,43 +165,51 @@ validate_all_targets() {
 
   validate_source
   install_skill "$tmp/.config/opencode/skills"
-  install_skill "$tmp/.agents/skills"
   install_skill "$tmp/.claude/skills"
 
-  echo "Validation passed for source, opencode, codex-skill, and claude-skill install layouts."
+  echo "All validations passed."
 }
 
-case "${1:-all}" in
+case "${1:-help}" in
   opencode)
     install_skill "$HOME/.config/opencode/skills"
     ;;
-  codex-skill)
-    install_skill "$HOME/.agents/skills"
-    ;;
-  claude-skill)
+  claude)
     install_skill "$HOME/.claude/skills"
     ;;
   all)
     install_skill "$HOME/.config/opencode/skills"
-    install_skill "$HOME/.agents/skills"
     install_skill "$HOME/.claude/skills"
     ;;
   validate)
     validate_all_targets
     ;;
+  package-plugin)
+    package_plugin
+    ;;
   powershell)
-    src_win="$(cd "$SRC" && pwd -W 2>/dev/null)" || {
+    src_win="$(cd "$SKILL_SOURCE" && pwd -W 2>/dev/null)" || {
       printf '%s\n' "This command must be run from Git Bash (MSYS2/MinGW) on Windows." >&2
       exit 1
     }
     printf '\n%s\n\n' "Run the following in PowerShell:"
     printf '  Copy-Item -Recurse '\''%s'\'' "$env:USERPROFILE\\.config\\opencode\\skills\\%s"\n' "$src_win" "$SKILL_NAME"
-    printf '  Copy-Item -Recurse '\''%s'\'' "$env:USERPROFILE\\.agents\\skills\\%s"\n' "$src_win" "$SKILL_NAME"
     printf '  Copy-Item -Recurse '\''%s'\'' "$env:USERPROFILE\\.claude\\skills\\%s"\n' "$src_win" "$SKILL_NAME"
     printf '\n'
     ;;
+  help|--help|-h)
+    echo "usage: $0 [command]"
+    echo ""
+    echo "Commands:"
+    echo "  opencode         Install skill to ~/.config/opencode/skills/$SKILL_NAME"
+    echo "  claude           Install skill to ~/.claude/skills/$SKILL_NAME"
+    echo "  all              Install to both opencode and claude"
+    echo "  validate         Validate source skill integrity"
+    echo "  package-plugin   Generate plugin packaging from source skill"
+    echo "  powershell       Print PowerShell copy commands for Windows"
+    ;;
   *)
-    echo "usage: $0 [opencode|codex-skill|claude-skill|all|validate|powershell]"
+    echo "usage: $0 [opencode|claude|all|validate|package-plugin|powershell|help]"
     exit 1
     ;;
 esac
