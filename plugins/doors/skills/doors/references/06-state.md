@@ -71,9 +71,9 @@ A `Source` is also a `Beam` — every source can be read, subscribed, bound, and
 
 ```go
 func NewSource[T comparable](init T) Source[T]                            // uses == equality
-func NewSourceEqual[T any](init T, equal func(new, old T) bool) Source[T] // custom equality
+func NewSourceEqual[T any](init T, equal func(new, old T) bool) Source[T] // custom equality; equal runs under lock — must not panic or call into sources/beams
 func NewSourceNoSkip[T comparable](init T) Source[T]                       // no-skip semantics
-func NewSourceEqualNoSkip[T any](init T, equal func(new, old T) bool) Source[T]
+func NewSourceEqualNoSkip[T any](init T, equal func(new, old T) bool) Source[T] // equal runs under lock — must not panic or call into sources/beams
 ```
 
 `Source` and `Beam` values are handles. A struct field's zero value is nil; initialize it with `NewSource`, `DeriveSource`/`DeriveBeam`, or a parent-provided value before any `Bind`, `Effect`, `Read`, or `Update`.
@@ -82,7 +82,7 @@ func NewSourceEqualNoSkip[T any](init T, equal func(new, old T) bool) Source[T]
 
 ```go
 func DeriveSource[T1 any, T2 comparable](source Source[T1], get func(T1) T2, set func(T1, T2) T1) Source[T2]
-func DeriveSourceEqual[T1 any, T2 any](source Source[T1], get func(T1) T2, set func(T1, T2) T1, equal func(new, old T2) bool) Source[T2]
+func DeriveSourceEqual[T1 any, T2 any](source Source[T1], get func(T1) T2, set func(T1, T2) T1, equal func(new, old T2) bool) Source[T2] // equal runs under lock — must not panic or call into sources/beams
 ```
 
 `get` extracts the derived value. `set` receives current parent + new derived, returns next parent.
@@ -100,7 +100,7 @@ units := doors.DeriveSource(settings,
 
 ```go
 func DeriveBeam[T1 any, T2 comparable](source Beam[T1], get func(T1) T2) Beam[T2]
-func DeriveBeamEqual[T1 any, T2 any](source Beam[T1], get func(T1) T2, equal func(new, old T2) bool) Beam[T2]
+func DeriveBeamEqual[T1 any, T2 any](source Beam[T1], get func(T1) T2, equal func(new, old T2) bool) Beam[T2] // equal runs under lock — must not panic or call into sources/beams
 ```
 
 ```go

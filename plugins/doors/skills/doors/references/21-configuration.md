@@ -32,16 +32,20 @@ type Conf struct {
     ServerDisableGzip             bool
     ServerSessionCookiePrefix     string // cookie prefix (e.g. __Host-)
     ServerSessionCookieNoSecure   bool   // omit Secure (dev only)
+    ServerRequestBodyLimit        int    // max request body bytes for hooks/forms; also max memory for ASubmit (default 8 MB)
 
     // Solitaire transport tuning (rarely needed)
-    SolitaireSyncTimeout     time.Duration
-    SolitaireQueue           int
-    SolitairePending         int
-    SolitairePing            time.Duration
-    SolitaireRollTimeout     time.Duration
-    SolitaireFlushSizeLimit  int
-    SolitaireFlushTimeout    time.Duration
-    SolitaireDisableGzip     bool
+    SolitaireRollTime               time.Duration // max request lifetime before rolling (default 15s)
+    SolitaireSyncTimeout            time.Duration // max pending sync task (default InstanceTTL)
+    SolitaireFrameTime              time.Duration // max frame buffer time before flush (default ~33ms)
+    SolitaireFrameSize              int           // max frame buffer bytes before flush (default 32 KB)
+    SolitaireDisableGzip            bool
+    SolitaireQueue                  int           // max queued + unresolved sync tasks (default 1024)
+    SolitairePending                int           // max unresolved sync tasks (default 256)
+    SolitaireDisableReportStreaming bool          // disable browser streaming reports
+    SolitaireReportLimit            int           // max report size (default 8 MB)
+    SolitaireReportTimeout          time.Duration // max time to receive one report (default min(5s, RollTime))
+    SolitaireMaxRTT                 time.Duration // RTT estimate cap for sync probing (default 1s)
 }
 ```
 

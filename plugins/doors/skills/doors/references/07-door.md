@@ -66,7 +66,7 @@ func (d *Door) XReload(ctx context.Context) <-chan error
 func (d *Door) XUnmount(ctx context.Context) <-chan error
 ```
 
-- `nil` = completed
+- two `nil` then close = scheduled (render completed), then applied to page
 - non-nil error = failed/canceled before finishing
 - `context.Canceled` = overwritten by newer operation or unmount
 - closed channel with no value = Door not mounted when observed, but internal state was updated (will affect future renders)

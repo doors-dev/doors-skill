@@ -17,6 +17,7 @@ func ResourceString(content string) ResourceStatic            // in-memory strin
 func ResourceHook(handler func(ctx context.Context, w http.ResponseWriter, r *http.Request) bool) Resource  // custom handler
 func ResourceHandler(handler func(w http.ResponseWriter, r *http.Request)) Resource  // stdlib-style handler
 func ResourceProxy(url string) Resource                       // reverse proxy
+func NewHook(ctx context.Context, r Resource) (string, bool)  // register resource as hook; body NOT bounded by ServerRequestBodyLimit
 type ResourceExternal = printer.SourceExternal                // direct external URL type; use doors.ResourceExternal("https://...")
 ```
 

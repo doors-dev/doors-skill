@@ -22,7 +22,7 @@ Each indicator type implements `Indicators` directly. Combine with `.And(...)` o
 | `IndicateClass(class)` | Add CSS class(es) |
 | `IndicateClassRemove(class)` | Remove CSS class(es) |
 
-`IndicateContent` writes to `innerHTML`; pass only trusted HTML.
+`IndicateContent` writes to `innerHTML` without escaping; pass only trusted HTML.
 
 ## Targets
 

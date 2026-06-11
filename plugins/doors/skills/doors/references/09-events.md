@@ -101,6 +101,7 @@ type RequestForm[D any] interface {
 type RequestRawForm interface {
     RequestCommon
     RequestAfter
+    SetRequestBodyLimit(limit int)  // override body limit per request; negative disables
     ResponseWriter() http.ResponseWriter
     Reader() (*multipart.Reader, error)
     ParseForm(maxMemory int) (ParsedForm, error)
@@ -114,9 +115,9 @@ type ParsedForm interface {
 }
 ```
 
-`ASubmit[T]` uses `github.com/go-playground/form/v4` for decoding form values into `D`. Follow that library's documentation for struct tag annotations. `MaxMemory` defaults to 8MB, passed to `ParseMultipartForm`.
+`ASubmit[T]` uses `github.com/go-playground/form/v4` for decoding form values into `D`. Request body is bounded by `ServerRequestBodyLimit` (default 8 MB), which also serves as the max memory limit for form parsing.
 
-For uploads or custom multipart parsing, use `ARawSubmit`, set an intentional parse limit with `ParseForm(maxMemory)` or `MaxMemory`, and treat filenames, content types, form fields, and file bytes as client-controlled. Validate by parsing/sniffing the content you accept; never trust the browser-provided filename or MIME type as proof, and do not accept/reject CSV solely by filename suffix.
+For uploads or custom multipart parsing, use `ARawSubmit`, set an intentional parse limit with `ParseForm(maxMemory)`, and treat filenames, content types, form fields, and file bytes as client-controlled. Validate by parsing/sniffing the content you accept; never trust the browser-provided filename or MIME type as proof, and do not accept/reject CSV solely by filename suffix.
 
 ## Common Fields (all event attrs)
 
@@ -134,7 +135,7 @@ Some also have:
 - `ExactTarget bool` (pointer/key events and focus-in/focus-out)
 - `Filter []string` (key events — match by `event.key`)
 - `ExcludeValue bool` (input — omit value from payload)
-- `MaxMemory int` (submit — multipart parse memory limit)
+
 
 ## Handler Return
 
