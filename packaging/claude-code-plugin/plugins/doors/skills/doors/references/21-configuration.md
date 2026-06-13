@@ -8,6 +8,7 @@ App-level options passed to `doors.NewApp(page, options...)`.
 func WithConf(conf Conf) With                            // runtime, session, serving
 func WithCSP(csp CSP) With                               // Content Security Policy
 func WithID(id string) With                              // server ID (URL prefix + cookie name)
+func WithIDCookie(name string) With                      // sticky-session cookie (empty = off)
 func WithLogger(l *slog.Logger) With                     // internal logger
 func WithSessionTracker(t SessionTracker) With           // observe session create/delete
 func WithErrorPage(ep ErrorPage) With                    // custom error page
@@ -32,7 +33,6 @@ type Conf struct {
     ServerDisableGzip             bool
     ServerSessionCookiePrefix     string // cookie prefix (e.g. __Host-)
     ServerSessionCookieNoSecure   bool   // omit Secure (dev only)
-    ServerIDCookieName            string // sticky-session cookie name (empty = off)
     ServerRequestBodyLimit        int    // max request body bytes for hooks/forms; also max memory for ASubmit (default 8 MB)
 
     // Solitaire transport tuning (rarely needed)
@@ -129,6 +129,11 @@ doors.WithID("blue")
 
 Must be URL-safe (no escaping). Use when running multiple Doors deployments side by side.
 
+```go
+doors.WithIDCookie("server_id")
+```
+Sets an extra cookie carrying the server ID for sticky session load balancers.
+
 ## Custom Error Page
 
 ```go
@@ -152,6 +157,7 @@ type SessionTracker interface {
 - Turn on CSP with `WithCSP` when you need it, add minimal sources
 - `ESProfile` for simple config, `WithESProfiles` for named profiles
 - `WithID` for side-by-side deployments
+- `WithIDCookie` for sticky session load balancing
 
 ## Related
 
