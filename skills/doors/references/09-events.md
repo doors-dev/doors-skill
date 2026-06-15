@@ -11,6 +11,7 @@ DOM events connected to Go handlers through special attributes.
 - [Flow](#flow)
 - [Attach Styles](#attach-styles)
 - [Reuse (activated attrs)](#reuse-activated-attrs)
+- [Event Presets](#event-presets)
 - [Unsupported Events](#unsupported-events)
 - [Related](#related)
 
@@ -191,6 +192,49 @@ func A(ctx context.Context, a ...Attr) Attr
 ```
 
 Reusing one activated attr shares the same hook instance → serialized execution across elements.
+
+## Event Presets
+
+When the same `Scope`, `Indicator`, and `OnError` appear on every handler, wrap the full attr in a small struct implementing `doors.Attr`. It holds only the varying fields and delegates `Proxy`/`Modify` to the underlying `doors.A...` type:
+
+```go
+var _ doors.Attr = SaveClick{}
+
+type SaveClick struct {
+	On func(context.Context, doors.RequestEvent[doors.PointerEvent]) bool
+}
+
+func (p SaveClick) Proxy(cur gox.Cursor, elem gox.Elem) error {
+	return p.click().Proxy(cur, elem)
+}
+
+func (p SaveClick) Modify(ctx context.Context, tag string, attrs gox.Attrs) error {
+	return p.click().Modify(ctx, tag, attrs)
+}
+
+func (p SaveClick) click() doors.AClick {
+	return doors.AClick{
+		Scope:     &doors.ScopeBlocking{},
+		Indicator: doors.IndicateAttr("aria-busy", "true"),
+		OnError: doors.ActionIndicate{
+			Indicator: doors.IndicateClass("error"),
+			Duration:  300 * time.Millisecond,
+		},
+		On: p.On,
+	}
+}
+```
+
+```gox
+<button (SaveClick{
+	On: func(ctx context.Context, r doors.RequestEvent[doors.PointerEvent]) bool {
+		// save logic
+		return false
+	},
+})>Save</button>
+```
+
+The same pattern works for any event attr family by wrapping the corresponding `doors.A...` type.
 
 ## Unsupported Events
 
