@@ -52,17 +52,17 @@ Use when: you want explicit, self-documenting wiring between a value and its fra
 
 ### Effect — inline, multi-source reactivity
 
-You read values imperatively inside a dynamic container. The framework tracks which values you read and re-renders the container when any of them change. Outer-facing: you pull values yourself.
+You read values imperatively inside a dynamic container. The framework tracks which values you read and re-renders the container when any of them change. Outer-facing: you pull values yourself. It's convinient to combine it with literal expression:
 
 ```gox
-~>(new(doors.Door)) ~func {
+~>(new(doors.Door)) ~({
     days, _ := d.days.Effect(ctx)
     units, ok := d.units.Effect(ctx)
     if !ok { return nil }
 
     svg, _ := weatherChart(ctx, city, units, days)
     return <img src=(svg)/>
-}
+})
 ```
 
 Use when: you prefer pulling values inline over declaring callback wiring, or when multiple related values must be read together before rendering.

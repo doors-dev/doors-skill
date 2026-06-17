@@ -79,7 +79,7 @@ Use this for colocated inline scripts whose target elements are siblings under t
 When code outside that local script needs a real ID, generate it on the server and pass it through markup/data. Use `doors.IDRand()` for a unique per-render ID, or `doors.IDString(value)` for a stable ID derived from a component property such as title, slug, or URL. For `IDString`, pick a value that is unique in that rendered scope. Both helpers produce selector-compatible IDs.
 
 ```gox
-~{ panelID := doors.IDRand() }
+~~ panelID := doors.IDRand() ~~
 <section id=(panelID)>
     ...
 </section>
@@ -91,7 +91,7 @@ When code outside that local script needs a real ID, generate it on the server a
 Use a stable ID when the same logical item should keep the same handle across renders:
 
 ```gox
-~{ headingID := doors.IDString(article.URL) }
+~~ headingID := doors.IDString(article.URL) ~~
 <h2 id=(headingID)>~(article.Title)</h2>
 ```
 

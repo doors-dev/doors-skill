@@ -182,11 +182,11 @@ func A(ctx context.Context, a ...Attr) Attr
 ```
 
 ```gox
-~{
-    radio := doors.A(ctx, doors.AChange{
-        On: func(ctx context.Context, r doors.RequestEvent[doors.ChangeEvent]) bool { return false },
-    })
-}
+~~
+radio := doors.A(ctx, doors.AChange{
+    On: func(ctx context.Context, r doors.RequestEvent[doors.ChangeEvent]) bool { return false },
+})
+~~
 <input type="radio" name="pick" value="a" (radio)/>
 <input type="radio" name="pick" value="b" (radio)/>
 ```

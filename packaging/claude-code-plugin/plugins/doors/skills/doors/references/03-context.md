@@ -6,16 +6,16 @@ Doors uses multiple context layers. Using the wrong one for an API call causes p
 
 ## Implicit `ctx` in GoX Templates
 
-Inside `elem` blocks and `~{ ... }` code blocks, a `ctx context.Context` variable is **automatically in scope**. It is the Doors runtime context — same as what you receive in handlers. You never need to declare it, receive it as a parameter, or pass it from outside.
+Inside `elem` blocks and `~~ ... ~~` code blocks, a `ctx context.Context` variable is **automatically in scope**. It is the Doors runtime context — same as what you receive in handlers. You never need to declare it, receive it as a parameter, or pass it from outside.
 
 ```gox
 elem (a App) Main() {
-    ~{
-        // ctx is available here without any declaration
-        loc := doors.Router(ctx)         // works
-        val, _ := someBeam.Read(ctx)     // works
-        auth.Update(ctx, true)            // works
-    }
+    ~~
+    // ctx is available here without any declaration
+    loc := doors.Router(ctx)         // works
+    val, _ := someBeam.Read(ctx)     // works
+    auth.Update(ctx, true)            // works
+    ~~
     <button (doors.AClick{
         On: func(ctx context.Context, r doors.RequestPointer) bool {
             // Inside handler callbacks, the parameter ctx shadows the outer one.
@@ -35,7 +35,7 @@ This is the `ctx` passed to you in:
 - Event/hook handlers: `On: func(ctx context.Context, ...) bool`
 - Page factory: `doors.NewApp(func(ctx context.Context, r doors.Request) gox.Comp { ... })`
 - Subscriptions: `beam.Sub(ctx, func(ctx context.Context, v T) bool { ... })`
-- **Implicitly: inside `elem` blocks and `~{ ... }` code blocks** (see above)
+- **Implicitly: inside `elem` blocks and `~~ ... ~~` code blocks** (see above)
 
 This context carries the current Door, instance, and session. **Always use it for Doors APIs** unless explicitly documented otherwise.
 

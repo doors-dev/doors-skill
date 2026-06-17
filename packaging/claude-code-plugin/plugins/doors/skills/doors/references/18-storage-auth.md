@@ -128,12 +128,12 @@ For larger branch-local auth logic, keep route dispatch in `.Route(...)` and com
 ```gox
 doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard }).Source(elem(dash doors.Source[Path]) {
     ~(auth.Bind(elem(s Session) {
-        ~func {
+        ~~
             if !s.Authorized {
                 return NewLoginPage(auth).Main()
             }
             return Dashboard{user: s.User, auth: auth, path: dash}.Main()
-        }
+        ~~
     }))
 })
 ```
@@ -142,9 +142,9 @@ Avoid this shape:
 
 ```gox
 ~(auth.Bind(elem(s Session) {
-    ~{
-        p := path.Get() // not subscribed to path changes
-    }
+    ~~
+    p := path.Get() // not subscribed to path changes
+    ~~
     ...
 }))
 ```
@@ -158,7 +158,7 @@ auth.Update(ctx, Session{Authorized: true, User: user})
 path.Update(ctx, Path{Route: RouteDashboard})
 ```
 
-Do not call `path.Update`, `auth.Update`, or other state mutations from inside a render path (`Bind` callback, `Effect` body, or `~{...}` block) just to redirect an unauthenticated user. Render the allowed view from the current auth state, or perform navigation from the handler/app bootstrap path that caused the state change.
+Do not call `path.Update`, `auth.Update`, or other state mutations from inside a render path (`Bind` callback, `Effect` body, or `~~...~~` block) just to redirect an unauthenticated user. Render the allowed view from the current auth state, or perform navigation from the handler/app bootstrap path that caused the state change.
 
 If a login component needs local error/message state, initialize that `Source` in an ordinary Go constructor or accept it from a parent before using it in `Bind` or the submit handler:
 

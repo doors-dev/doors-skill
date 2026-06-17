@@ -109,9 +109,9 @@ If the scope is occupied by one group, an event from a different group is cancel
 Same scope instance → handlers coordinate with each other:
 
 ```gox
-~{
-    block := &doors.ScopeBlocking{}
-}
+~~
+block := &doors.ScopeBlocking{}
+~~
 <button (doors.AClick{Scope: block, On: ...})>One</button>
 <button (doors.AClick{Scope: block, On: ...})>Two</button>
 ```

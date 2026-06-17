@@ -108,10 +108,10 @@ Render a placeholder first, replace it with heavy content after the page is visi
 
 ```gox
 elem (c chart) Main() {
-    ~{
-        door := new(doors.Door)
-        defer door.Static(ctx, <img src=(c.load())/>)
-    }
+    ~~
+    door := new(doors.Door)
+    defer door.Static(ctx, <img src=(c.load())/>)
+    ~~
     <div>
         ~(door)
         <div>Loading...</div>

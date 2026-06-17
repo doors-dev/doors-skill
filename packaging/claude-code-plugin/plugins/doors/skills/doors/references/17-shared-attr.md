@@ -30,9 +30,9 @@ NOT for rich DOM manipulation — use `ActionEmit` + `$on(...)` for that.
 ## Example
 
 ```gox
-~{
-    locked := doors.NewAShared("disabled", "")
-}
+~~
+locked := doors.NewAShared("disabled", "")
+~~
 
 <header>
     <button (locked)>Save draft</button>

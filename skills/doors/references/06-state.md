@@ -149,13 +149,13 @@ func (p Path) days() int {
 **No external calls.** `get()` and `set()` functions must be pure, synchronous transformations — no DB queries, HTTP calls, or I/O. They run frequently and their result must be immediately available. If you need to load data that depends on derived state, create a separate data source and use `Effect` to react when the derivation changes:
 
 ```gox
-~>(new(doors.Door)) ~func {
+~>(new(doors.Door)) ~({
     days, _ := d.days.Effect(ctx)      // ← pure, immediate, bounded
     units, ok := d.units.Effect(ctx)
     if !ok { return nil }
     svg, _ := weather.Temperature(ctx, city, units, days)
     ...
-}
+})
 ```
 
 **State holds identifiers, not bulk data.** Keep IDs, filters, settings, selections in Doors state. Query backing data during render and forget it. Storing small config-like records (e.g., user access settings) is fine; storing table data (product lists, search results) rarely makes sense. Storing gox elements/components is possible but be cautious — prefer generating markup from state during render.
@@ -196,7 +196,7 @@ Use when: you want explicit, self-documenting wiring between a value and its fra
 You read values imperatively inside a dynamic container. The framework tracks which values you read and rerenders the container when any of them change. Outer-facing: you pull values yourself.
 
 ```gox
-~>(new(doors.Door)) ~func {
+~>(new(doors.Door)) ~({
     days, _ := d.days.Effect(ctx)
     units, ok := d.units.Effect(ctx)
     if !ok {
@@ -205,7 +205,7 @@ You read values imperatively inside a dynamic container. The framework tracks wh
     values, _ := driver.Weather.Temperature(ctx, city, units, days)
     svg, _ := driver.ChartLine(values.Values, values.Labels, units.Temperature())
     return <img src=(svg)/>
-}
+})
 ```
 
 Use when: you prefer pulling values inline over declaring callback wiring, or when multiple related values must be read together before rendering (e.g. query params → data fetch → render).

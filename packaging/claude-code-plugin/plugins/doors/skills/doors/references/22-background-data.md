@@ -37,12 +37,12 @@ type profileView struct {
 }
 
 elem (f profileView) Main() {
-    ~{
-        ctx := doors.DetachedContext(ctx)
-        go f.poll(ctx, func(p Profile) {
-            f.profile.Update(ctx, p)
-        })
-    }
+    ~~
+    ctx := doors.DetachedContext(ctx)
+    go f.poll(ctx, func(p Profile) {
+        f.profile.Update(ctx, p)
+    })
+    ~~
     ~(f.profile.Bind(f.showProfile))
 }
 

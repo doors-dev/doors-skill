@@ -65,6 +65,12 @@ page.x.go    # generated (do not edit)
 
 A `.gox` file is a Go file plus the `elem` keyword and HTML literals. Use `.gox` only when the file needs template syntax (`elem`, HTML literals, fragments, placeholders, raw blocks, template control flow). Otherwise use `.go`. Top-level Go declarations (`import`, `type`, `func`, methods) are always normal Go and live outside `elem` bodies.
 
+### Old syntax compatibility
+
+Old forms `~func { ... }` and `~{ ... }` may appear in existing code. `gox fmt`
+automatically converts them to `~({ ... })` (GoX expression) and `~~ ... ~~`
+(Go snippet). Keep the `gox` binary up to date — run `gox ver` to check.
+
 ### HTML literals are Go expressions
 
 Inside `.gox`, `<tag>...</tag>` is a `gox.Elem` value. Use anywhere a Go expression goes:
@@ -95,11 +101,11 @@ func Greeting(name string) gox.Elem {
 }
 ```
 
-**Render-time vs call-time:** an `elem` body evaluates when the element renders. A regular function returning `<...>` runs Go code before the `return` *immediately when called*. Idiom: use `elem` with a top `~{ ... }` setup block:
+**Render-time vs call-time:** an `elem` body evaluates when the element renders. A regular function returning `<...>` runs Go code before the `return` *immediately when called*. Idiom: use `elem` with a top `~~ ... ~~` setup block:
 
 ```gox
 elem Page() {
-    ~{ /* render-time setup */ }
+    ~~ /* render-time setup */ ~~
     <main>...</main>
 }
 ```
@@ -115,16 +121,16 @@ Anonymous `elem() { ... }` exists. Prefer named helpers; use anonymous only when
 
 **Pitfall:** `elem` is a reserved keyword. Cannot be used as variable/parameter/field name (e.g. `Proxy(cur, elem gox.Elem)` is a parse error — rename to `el`).
 
-### Go statements: `~{ ... }`
+### Go snippet: `~~ ... ~~`
 
-Plain Go statements (`x := 1`, `if err != nil`, `sort.Slice(...)`, etc.) **cannot** appear bare in template syntax. Wrap them in `~{ ... }`:
+Plain Go statements (`x := 1`, `if err != nil`, `sort.Slice(...)`, etc.) **cannot** appear bare in template syntax. Wrap them in `~~ ... ~~`:
 
 ```gox
 elem UserList() {
-    ~{
-        type User struct { Name string }
-        users := []User{{Name: "Ada"}, {Name: "Ben"}}
-    }
+    ~~
+    type User struct { Name string }
+    users := []User{{Name: "Ada"}, {Name: "Ben"}}
+    ~~
     <ul>
         ~(for _, u := range users {
             <li>~(u.Name)</li>
@@ -133,13 +139,13 @@ elem UserList() {
 }
 ```
 
-Inside `~{ ... }` you're in the generated render function (returns `error`).
+Inside `~~ ... ~~` you're in the generated render function (returns `error`).
 
 **Top-of-`elem` setup block** (before any HTML emitted): validation, data loading, derived values, whole-component guards. From there, `return nil` skips the whole element; `return err` causes render error (do not use, prefer error branch rendering):
 
 ```gox
 elem MaybePanel(show bool) {
-    ~{ if !show { return nil } }
+    ~~ if !show { return nil } ~~
     <section>Visible</section>
 }
 ```
@@ -149,12 +155,12 @@ elem MaybePanel(show bool) {
 ```gox
 elem BrokenPanel() {
     <div>
-        ~{ return nil }   // bad: exits before </div>
+        ~~ return nil ~~   // bad: exits before </div>
     </div>
 }
 ```
 
-Inside open markup, use `~(if ...)` or an inline `~func { return nil }` to skip only a child:
+Inside open markup, use `~(if ...)` or an inline `~({ return nil })` to skip only a child:
 
 ```gox
 elem OptionalChild(show bool) {
@@ -162,7 +168,7 @@ elem OptionalChild(show bool) {
         ~// prefereable form:
         ~(if show { <span>Visible</span> })
         ~// in case of complex logic:
-        ~func {
+        ~({
             if one {
                 return nil
             }
@@ -171,16 +177,16 @@ elem OptionalChild(show bool) {
             }
             /* ... */
             return <strong>Ready</strong>
-        }
+        })
     </div>
 }
 ```
 
-**HTML tags create Go scopes.** Variables declared inside a tag body aren't visible to siblings. Declare shared values in a top-level `~{ ... }`:
+**HTML tags create Go scopes.** Variables declared inside a tag body aren't visible to siblings. Declare shared values in a top-level `~~ ... ~~`:
 
 ```gox
 elem SharedValue() {
-    ~{ label := "GoX" }
+    ~~ label := "GoX" ~~
     <h1>~(label)</h1>
     <p>~(label)</p>
 }
@@ -270,7 +276,7 @@ If you need switch-like branching, prefer an `if`/`else if` chain in the templat
 
 For a real `switch`, use an inline expression and return from each case:
 ```gox
-~func {
+~({
     switch state {
     case "loading":
         return <p>Loading...</p>
@@ -279,16 +285,16 @@ For a real `switch`, use an inline expression and return from each case:
     default:
         return nil
     }
-}
+})
 ```
 
-### Inline func: `~func { ... }`
+### GoX expression: `~({ ... })`
 
-Render-time evaluation; the return value (text, component, or HTML literal) is inserted at that point (works in attibute values also). Use when logic exceeds a simple `~(if ...)`:
+Render-time evaluation; the return value (text, component, or HTML literal) is inserted at that point. Use when logic exceeds a simple `~(if ...)`:
 
 ```gox
 <div>
-    ~func {
+    ~({
         user, err := db.Get(id)
         if err != nil { return <span>error</span> }
         switch user.Role {
@@ -296,11 +302,11 @@ Render-time evaluation; the return value (text, component, or HTML literal) is i
             return <strong>~(user.Name)</strong>
         }
         return Card(user)
-    }
+    })
 </div>
 ```
 
-For conditions prefer `~(if ...)`. 
+For simple conditions prefer `~(if ...)`. The GoX expression form works in attribute values too.
 
 ### Fragments: `<>...</>`
 
@@ -319,14 +325,19 @@ Layout(<>
 
 - String/numeric literal: `<div class="card" tabindex=0>`.
 - Go expression in parens: `<div id=(id) title=(user.Bio)>`.
-- Function literal (eval at render): `<input checked=func { return u.Agreed }>`.
+- GoX expression (eval at render): `<input checked=({ return u.Agreed })>`.
 - Bare attribute: `<input required>` ≡ `required=(true)`.
 - `nil` or `false` → attribute omitted (cosmetic stray space may remain).
 - `true` → bare name: `checked=(true)` → `checked`.
 - **Names case-sensitive**: `class` ≠ `Class` (both emitted).
 - **Output order: alphabetical**, not source order.
 
-**No `~` in attribute values.** Use `id=(id)`, `class=(tone)`, `checked=func { return ok }` — never `id=~(id)` or `checked=~func { ... }`.
+Attribute values follow the same rules as placeholders (`~(expr)`), but `=` replaces `~`:
+- Literal: `class="card"`, `tabindex=0`
+- Expression in parens: `id=(id)`
+- GoX expression: `checked=({ return ok })`
+
+**Never use `~` in an attribute value** — `id=~(id)` or `checked=~({ ... })` is wrong. The `=` already signals a GoX value.
 
 ### Attribute Modifiers
 
@@ -478,10 +489,10 @@ elem (m Menu) Main() {
     <ul>~(for _, item := range m.Items { ~(m.item(item)) })</ul>
 }
 elem (m Menu) item(item MenuItem) {
-    <li class=func {
+    <li class=({
         if item.Slug == m.Active { return "active" }
         return nil
-    }>
+    })>
         <a href=(item.Path)>~(item.Title)</a>
     </li>
 }
@@ -543,7 +554,7 @@ Same idea via struct field of type `gox.Elem` or `gox.Comp` (the latter accepts 
 
 ### Proxies: `~>(p) nextItem`
 
-A `Proxy` captures the next renderable item at render time (element, component placeholder, `~func`, raw block, text, control-flow, or placeholder).
+A `Proxy` captures the next renderable item at render time (element, component placeholder, `~({...})`, raw block, text, control-flow, or placeholder).
 
 **Captures one item only.** `~>(p) Text ~(dd)` captures only `Text`. Group siblings into one item: wrapper element, fragment, or multi-value placeholder `~>(p) ~("Text ", dd)`.
 
@@ -561,7 +572,7 @@ Common usage:
 ~>(doors.Class("primary")) ~(Button{})
 ~>(TestID("save")) ~(Button{})
 ~>doors.AClick{On: saveClick} ~(Button{})
-~>(Track) ~func { return <span>computed</span> }
+~>(Track) ~({ return <span>computed</span> })
 ~>(Track) ~("Text ", dd)
 ~>(Track) Text
 ~>(p1, p2) <div>chained</div>
@@ -690,12 +701,12 @@ Captured item must begin with an element/component/container that resolves to an
 
 1. **Edited `.x.go` by hand** — gone on next `gen`. Edit `.gox`.
 2. **Wrote new templates in cursor style** (`gox.Elem(func(cur)...)`) in `.go` — write `.gox` instead.
-3. **Plain Go statements bare in `elem` body** — wrap in `~{ ... }`.
-4. **Render-time setup before `return <...>` in regular func** — runs at call time, not render. Use `elem` + top `~{ ... }`.
+3. **Plain Go statements bare in `elem` body** — wrap in `~~ ... ~~`.
+4. **Render-time setup before `return <...>` in regular func** — runs at call time, not render. Use `elem` + top `~~ ... ~~`.
 5. **Forgot `gox gen` after edit** — "undefined" build errors.
 6. **Forgot `gox gen` after `gox fmt`** — source map drifts.
 7. **Used `elem` as identifier name** — reserved keyword. Rename.
-8. **`return nil` inside open markup** — breaks HTML. Guard at top of `elem`, or use `~(if ...)`/`~func { return nil }` for child-only skips.
+8. **`return nil` inside open markup** — breaks HTML. Guard at top of `elem`, or use `~(if ...)`/`~({ return nil })` for child-only skips.
 9. **Variable from tag scope referenced later** — tags create scopes. Declare in top-level snippet.
 10. **`~name` without parens** — parse error. Always `~(name)`. Parenless = literals only.
 11. **Mixed `class` and `Class`** — separate attributes. Pick one casing - lower by default.
@@ -703,15 +714,13 @@ Captured item must begin with an element/component/container that resolves to an
 13. **Tried `<MyComponent/>`** — no JSX. Use `~(myComponent)` or composite-literal placeholder.
 14. **Used `Main` as field name** — collides with render method. Rename.
 15. **Pure-Go file as `.gox`** — use `.go` when no GoX/HTML syntax.
-16. **Expected different `elem` visibility** — same as Go (uppercase = exported).
-17. **`~(...)` in attribute** — text/template positions only. Use `id=(id)`, `checked=func { ... }`.
-18. **Called `attrs.Set(...)` in `Modify`** — method is `attrs.Get(name).Set(value)`.
-19. **`</br>` / `</input>`** — void tags have no closing. Use `<br>`, `<br/>`, `<br />`.
-20. **Unescaped via `~(untrustedHTML)`** — that escapes. `<:>...</:>` or `gox.EditorFunc + cur.Raw` for trusted only.
-21. **Whitespace between placeholders** — `~(a) ~(b)`, `~(a)~(b)` have no space, `~(a, " ", b)` has.
-22. **Expected raw template indentation/newlines** — normalized. Intentional spaces preserved. Use raw blocks for verbatim.
-23. **Expected proxy to capture multiple siblings** — captures one. Group via fragment/wrapper/multi-value placeholder.
-24. **Custom `Proxy` for ordinary wrapping/attributes** — use components, `Modify`, or `doors.ProxyMod` instead.
-25. **Imported `gox` but unused in `.gox`** — fine; generated `.x.go` references `gox.Elem` for `elem` and HTML syntax, so module must be in `go.mod`.
-26. **Version drift** — generated files have version markers; CI must use matching `gox`.
-27. **Added `goxx` to a Doors project** — remove it and use Doors helpers.
+16. **`~(...)` in attribute** — text/template positions only. Use `id=(id)`, `checked=({ ... })`.
+17. **Called `attrs.Set(...)` in `Modify`** — method is `attrs.Get(name).Set(value)`.
+18. **`</br>` / `</input>`** — void tags have no closing. Use `<br>`, `<br/>`, `<br />`.
+19. **Unescaped via `~(trustedHTML)`** — that escapes. `<:>...</:>` or `gox.EditorFunc + cur.Raw` for trusted only.
+20. **Whitespace between placeholders** — `~(a) ~(b)`, `~(a)~(b)` have no space, `~(a, " ", b)` has.
+21. **Expected raw template indentation/newlines** — normalized. Intentional spaces preserved. Use raw blocks for verbatim.
+22. **Expected proxy to capture multiple siblings** — captures one. Group via fragment/wrapper/multi-value placeholder.
+23. **Custom `Proxy` for ordinary wrapping/attributes** — use components, `Modify`, or `doors.ProxyMod` instead.
+24. **Version drift** — generated files have version markers; CI must use matching `gox`.
+25. **Added `goxx` to a Doors project** — remove it and use Doors helpers.

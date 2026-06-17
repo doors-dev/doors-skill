@@ -1,5 +1,5 @@
 {
-  "version": "0.1.12",
+  "version": "0.1.13",
   "skill": "doors",
   "cases": [
     {
@@ -185,7 +185,7 @@
         "Updates route or reactive auth state after successful login/logout.",
         "Checks authorization while deciding what to render and rechecks at the service/database operation level when permissions can change.",
         "Initializes any local Source fields before Bind/Update and uses GoX ~(...) interpolation rather than JSX-style {expr}; does not render a LoginPage with a nil message Source field.",
-        "Does not call path.Update, auth.Update, or other state mutations from render paths such as Bind callbacks, Effect bodies, or GoX ~{...} blocks to redirect.",
+        "Does not call path.Update, auth.Update, or other state mutations from render paths such as Bind callbacks, Effect bodies, or GoX ~~...~~ blocks to redirect.",
         "Uses Route primitives for route dispatch with auth binding inside protected branches, or binds auth first only when the whole app shell is auth-gated and routes inside the authorized branch.",
         "Uses RouteMatch(...).Comp(...) or RouteDefaultComp(...) for static/login branches that do not need the routed source, instead of .Source(...) with an ignored or forwarded path source.",
         "Does not use whole-path Bind, path.Get inside an auth-only Bind, or pass a full doors.Source[Path] into any component that does not read or write the route."
