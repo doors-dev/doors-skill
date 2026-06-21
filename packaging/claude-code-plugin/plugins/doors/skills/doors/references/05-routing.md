@@ -2,7 +2,7 @@
 
 URL is reactive state in Doors. Routing = branching content on `doors.Source[doors.Location]`.
 
-Path models (structs with `path:"..."` tags) are the recommended way to do routing, but they are not a framework-enforced requirement. You can route directly on `Location` using the same state routing primitives (`RouteMatch`, `RouteDerive`, etc.) without a path model, or implement a fully custom routing system on top of `doors.Router(ctx)`. See the "Source/Beam-Level Routing" section below for the primitive API.
+Path models are the normal way to do app routing. They decode URLs into typed Go values and encode those values back into URLs. You can route directly on `Location` using the same state routing primitives (`RouteMatch`, `RouteDerive`, etc.) without a path model, or implement a custom routing system on top of `doors.Router(ctx)`. See the "Source/Beam-Level Routing" section below for the primitive API.
 
 ## Contents
 
@@ -20,7 +20,7 @@ Path models (structs with `path:"..."` tags) are the recommended way to do routi
 
 ```gox
 type Path struct {
-    Section Section `path:"/ | /docs/:ID? | /tutorial/:ID? | /license"`
+    Section Section `/:" | docs/:ID? | tutorial/:ID? | license"`
     ID      *string
 }
 
@@ -37,9 +37,7 @@ elem (a App) Main() {
     <html lang="en">
         <body>
             ~(doors.Route(
-                doors.RouteModel(elem(p doors.Source[Path]) {
-                    ~(Page(p))
-                }),
+                doors.RouteModel(Page),
                 doors.RouteLocationDefaultComp(NotFound{}),
             ))
         </body>
@@ -60,45 +58,97 @@ type Location struct {
 
 A Go struct describing URL shape. Decodes URL -> typed value, encodes back for links/redirects.
 
-### Int Multi-Variant (single field with `|`)
+Path models use one `int` variant field. Use a named `int` type with `iota` constants for readable route switches.
 
 ```go
 type Path struct {
+    Section Section `/:" | docs | guide"`
+}
+
+type Section int
+const (
+    SectionHome Section = iota
+    SectionDocs
+    SectionGuide
+)
+```
+
+The `int` field stores the matched variant index. Encoding picks the variant at that index.
+
+The tag key is the path prefix. The tag value is a `|`-separated list of variants under that prefix.
+
+Use `/` for small models and single pages:
+
+```go
+type Path struct {
+    Section Section `/:" | catalog | search"`
+}
+```
+
+Use a longer prefix key to describe an area with several local variants or shared parameters:
+
+```go
+type Path struct {
+    Section Section `/posts:" | new | archived"`
+}
+```
+
+This matches `/posts`, `/posts/new`, and `/posts/archived`.
+
+In a real app with dozens of pages, path models stay ergonomic when they are small. Put as much shared path as the area needs in the key, then keep the variants relative to it. For example, `"/post/:ID":"view | edit"` reads as "inside a post, choose view or edit". A larger app might use a deeper key such as `"/org/:OrgID/project/:ProjectID":"overview | settings | ..."`.
+
+Prefer `/:"catalog"` over `/catalog:""` for a single route. A segment in the key is for declaring an area, not for spelling every path segment.
+
+Use `/` as the root prefix:
+
+```go
+type Path struct {
+    Section Section `/:" | docs | guide"`
+}
+```
+
+Quote the tag key when the prefix contains `:` or another character that cannot appear in an unquoted Go struct-tag key:
+
+```go
+type Path struct {
+    Section Section `"/post/:ID":"view | edit"`
+    ID      int
+}
+```
+
+This matches `/post/42/view` and `/post/42/edit`.
+
+### Old API To Convert
+
+Old path models may use bool marker fields or `path:"..."` tags, for example:
+
+```go
+type OldPath struct {
+    Home bool `path:"/"`
+    Docs bool `path:"/docs"`
+}
+
+type OldIntPath struct {
     Section Section `path:"/ | /docs | /guide"`
 }
 ```
-The `int` field stores the matched pattern index. Use with `iota` constants.
 
-### Bool Variants (one field per pattern)
-
-```go
-type Path struct {
-    Home  bool `path:"/"`
-    Docs  bool `path:"/docs"`
-    Guide bool `path:"/guide"`
-}
-```
-Matched variant's field becomes `true`. When encoding, first `true` variant in field order wins.
-
-### Choosing: Int vs Bool
-
-- **Int** — compact for many variants, exhaustive switches via `iota` constants, implicit order
-- **Bool** — explicit names (`Path{Docs: true}`), natural for ≤3 variants, single-pattern models
-
-> **Pitfall**: Keep path models to ≤6 route variants. If you need more, split into separate smaller models by area.
+Treat this as compatibility syntax. In old tags, `path` is used as the tag key instead of a path prefix key such as `/`, `/posts`, or `"/post/:ID"`. When editing routing, docs, examples, or nearby code, convert old bool markers and old `path:"..."` tags to the int variant prefix-tag form unless the user explicitly asks for a compatibility-only edit.
 
 ### Normalization
 
-- Slashes: `"/docs"`, `"docs"`, `"/docs/"` all equivalent
-- Separators: `"/|/docs|/guide"` same as `"/ | /docs | /guide"`
-- Cannot mix int and bool variants in one struct
+- Write prefixes with a leading slash. Slashes are normalized — `/docs`, `docs`, and `/docs/` describe the same prefix or variant.
+- Separators: `"|docs|guide"` same as `" | docs | guide"`.
+- Empty variant means the prefix itself: `/posts:" | new"` matches `/posts` and `/posts/new`.
+
+> **Pitfall**: Keep path models to ≤6 route variants. If you need more, split into separate smaller models by area.
 
 ### Params (path segments)
 
 ```go
 type Path struct {
-    Post bool `path:"/posts/:ID"`
-    ID   int
+    Section Section `/:"posts/:ID"`
+    ID      int
 }
 ```
 Types: `string`, `int`, `int64`, `uint`, `uint64`, `float64`.
@@ -107,8 +157,8 @@ Types: `string`, `int`, `int64`, `uint`, `uint64`, `float64`.
 
 ```go
 type Path struct {
-    Catalog bool `path:"/catalog/:ID?"`
-    ID      *int  // must be pointer
+    Section Section `/:"catalog/:ID?"`
+    ID      *int // must be pointer
 }
 ```
 
@@ -116,8 +166,8 @@ type Path struct {
 
 ```go
 type Path struct {
-    Docs bool     `path:"/docs/:Rest+"`
-    Rest []string // must be []string
+    Section Section `/:"docs/:Rest+"`
+    Rest    []string // must be []string
 }
 ```
 
@@ -134,7 +184,7 @@ Rules:
 
 ```go
 type Path struct {
-    Catalog bool     `path:"/catalog"`
+    Section Section `/:"catalog"`
     Color   []string `query:"color"`
     Page    *int     `query:"page"`
 }
@@ -145,8 +195,8 @@ Uses [go-playground/form v4](https://github.com/go-playground/form/tree/v4.2.1) 
 
 ```go
 type Path struct {
-    Search bool       `path:"/search"`
-    Query  url.Values // all query values as-is
+    Section Section `/:"search"`
+    Query   url.Values // all query values as-is
 }
 ```
 Don't mix `url.Values` field with `query` tags.
@@ -199,7 +249,7 @@ Use Route primitives for the page switch:
 ```gox
 elem Page(path doors.Source[Path]) {
     ~(path.Route(
-        doors.RouteMatch(func(p Path) bool { return p.Section == SectionReports }).Source(ReportsPage),
+        doors.RouteMatch(func(p Path) bool { return p.Section == SectionReports }).Bind(ReportsPage),
         doors.RouteMatch(func(p Path) bool { return p.Section == SectionHome }).Comp(HomePage{}),
         doors.RouteDefaultComp[Path](NotFound{}),
     ))

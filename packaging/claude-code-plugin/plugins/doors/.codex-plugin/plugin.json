@@ -1,6 +1,6 @@
 {
   "name": "doors",
-  "version": "0.1.12",
+  "version": "0.1.14",
   "description": "Always use for any Doors project work. Covers the Go server-side UI framework, reactive state, typed routing, events, auth, sessions, resources, and GoX template boundaries.",
   "author": {
     "name": "Doors Dev"

@@ -83,29 +83,9 @@ Only check the last `ok` — `Effect` fails only on canceled context.
 
 ### Fields
 
-```gox
-type placeSelector struct {
-    title    string                     // configuration
-    search   func(string) ([]Place, error)  // dependency
-    selected doors.Source[Place]        // reactive state from parent
-    scope    doors.Scopes               // shared scheduling
-}
-```
+Keep component fields tied to ownership and reuse. Use an `elem` function for markup that does not need state or methods. Use a struct component when a value must persist after `Main()` returns: state handles, Door handles, dependencies called by handlers, or configuration shared by methods.
 
-### `any` fields for text or markup
-
-Fields typed `any` accept strings, numbers, and `<>...(markup)...</>` fragments:
-
-```gox
-type navLink struct {
-    model any
-    text  any   // "Home" or <>~("Day ", days)</>
-}
-
-elem (l navLink) Main() {
-    ~>doors.ALink{Model: l.model} <a>~(l.text)</a>
-}
-```
+Model data with concrete types. If a component needs a content slot, make that slot explicit and document what callers may pass.
 
 ### Static Data Components
 
@@ -113,15 +93,15 @@ When a repeated/static block has one template shape plus variable data, make the
 
 ```gox
 type ContentBlock struct {
-    Title string
-    Body  any
-    Items []string
+    Title       string
+    Description string
+    Items       []string
 }
 
 elem (b ContentBlock) Main() {
     <div>
         <h2>~(b.Title)</h2>
-        <div>~(b.Body)</div>
+        <p>~(b.Description)</p>
         <ul>
             ~(for _, item := range b.Items {
                 <li>~(item)</li>
@@ -131,7 +111,7 @@ elem (b ContentBlock) Main() {
 }
 
 var contentBlocks = []ContentBlock{
-    {Title: "Authentication", Body: "Session-backed access", Items: []string{"Sign in", "Protected sections"}},
+    {Title: "Authentication", Description: "Session-backed access", Items: []string{"Sign in", "Protected sections"}},
 }
 
 elem ContentBlocks() {
@@ -141,7 +121,7 @@ elem ContentBlocks() {
 }
 ```
 
-For one item, render the literal directly: `~ContentBlock{Title: "Authentication", Body: "...", Items: []string{"Sign in"}}`. For many items, prefer the explicit `for/range`; it is clearer and lets each component have wrappers, classes, IDs, or per-item attrs. Direct `~(items)` is valid only for intentionally typed render slices such as `[]any` or `[]gox.Comp`, not as the default for a typed component slice like `[]ContentBlock`.
+For one item, render the literal directly: `~ContentBlock{Title: "Authentication", Description: "...", Items: []string{"Sign in"}}`. For many items, prefer the explicit `for/range`; it is clearer and lets each component have wrappers, classes, IDs, or per-item attrs. Direct `~(items)` is valid only for intentionally typed render slices such as `[]any` or `[]gox.Comp`, not as the default for a typed component slice like `[]ContentBlock`.
 
 ### State ownership
 

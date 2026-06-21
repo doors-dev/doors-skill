@@ -114,7 +114,7 @@ A dashboard page has query params `units` (metric/imperial) and `days` (1-7). Th
 ```go
 // Path model with query params
 type Path struct {
-    Route  Route          `path:"/ | /:CityID"`
+    Route  Route          `/:" | :CityID"`
     CityID int
     Units  *driver.Units  `query:"units"`
     Days   *int           `query:"days"`

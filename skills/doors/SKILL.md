@@ -112,7 +112,9 @@ The function passed to `NewApp` is a per-request page factory, not the router. U
 
 ### Routing
 
-Prefer typed path models for normal app routing. A path model decodes the URL into a Go value and encodes the same value back into a URL for links, redirects, and programmatic navigation.
+Prefer typed path models for normal app routing. A path model decodes the URL into a Go value and encodes the same value back into a URL for links, redirects, and programmatic navigation. Path models use one int variant field with prefix tags such as ``Section Section `/:" | docs | guide"` `` or ``Section Section `"/post/:ID":"view | edit"` ``. Use `/` for small models and single pages; use a prefix key with as many shared segments and params as the area needs to define a small area-local model with relative variants.
+
+Old bool marker fields and old ``path:"..."`` tags are compatibility syntax. In old tags, `path` is used as the tag key instead of a path prefix key such as `/`, `/posts`, or `"/post/:ID"`. If you encounter them while changing routing, convert to the int variant prefix-tag form unless the user explicitly asks for a compatibility-only edit.
 
 When changing routing, inspect the existing model first, add variants to the existing model when appropriate, put fallbacks last, and do not treat a route match as authorization. Prefer `doors.Route`, `RouteModel`, `source.Route`, `RouteMatch`, `RouteDerive`, `RouteValue`, and defaults for dispatch. `.Route` keeps the active branch when the active match stays the same; a branch inside `Bind` rerenders on every subscribed value change. Do not `Bind` the whole path at the page shell to switch on one field; the ladder is path/model branch key, then narrower derived branch keys, then params/query effects or binds only where consumed.
 
