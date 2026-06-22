@@ -38,7 +38,7 @@ elem (a App) Main() {
         <body>
             ~(doors.Route(
                 doors.RouteModel(Page),
-                doors.RouteLocationDefaultComp(NotFound{}),
+                doors.RouteDefaultComp[doors.Location](NotFound{}),
             ))
         </body>
     </html>
@@ -214,11 +214,13 @@ func RouteModelBeam[M any, C gox.Comp](render func(Beam[M]) C) RouteBeam[Locatio
 ### Fallbacks
 
 ```go
-func RouteLocationDefault[C gox.Comp](render func(Source[Location]) C) RouteSource[Location]
-func RouteLocationDefaultComp(comp gox.Comp) RouteBeam[Location]
-func RouteLocationDefaultBeam[C gox.Comp](render func(Beam[Location]) C) RouteBeam[Location]
-func RouteLocationDefaultBind[C gox.Comp](render func(Location) C) RouteBeam[Location]
+func RouteDefault[T any, C gox.Comp](render func(Source[T]) C) RouteSource[T]
+func RouteDefaultComp[T any](comp gox.Comp) RouteBeam[T]
+func RouteDefaultBeam[T any, C gox.Comp](render func(Beam[T]) C) RouteBeam[T]
+func RouteDefaultBind[T any, C gox.Comp](render func(T) C) RouteBeam[T]
 ```
+
+Use `T = doors.Location` for top-level `doors.Route(...)` fallbacks.
 
 ### Route Granularity Ladder
 Keep one typed path source of truth, but route and subscribe at the narrowest level that owns the concern:
@@ -352,7 +354,7 @@ List in order of specificity — first match wins:
     doors.RouteModel(renderHome),
     doors.RouteModel(renderPost),
     doors.RouteModel(renderCatalog),
-    doors.RouteLocationDefaultComp(NotFound{}),
+    doors.RouteDefaultComp[doors.Location](NotFound{}),
 ))
 ```
 
