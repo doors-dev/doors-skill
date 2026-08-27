@@ -5,7 +5,7 @@ Use two layers:
 - Pure Go business logic gets normal Go tests: services, queries, validation, authorization decisions, path-model helpers, encoders, parsers, and other functions that do not need a live Doors instance.
 - Anything touching Doors state, rendering, hooks, navigation, sessions, resources, or browser behavior gets Rod-based e2e tests against a real `doors.App`.
 
-Do not fake the Doors runtime for lifecycle or propagation behavior. If a test needs `Source`, `Beam`, `Lens`, `Bind`, `Effect`, hooks, `Door`, `ALink`, browser history, session cookies, resource injection, or DOM updates, drive it through a browser and assert the observable page result.
+Do not fake the Doors runtime for lifecycle or propagation behavior. If a test needs `Source`, `Beam` (incl. `DeriveSource`/`DeriveBeam`), `Bind`, `Effect`, hooks, `Door`, `ALink`, browser history, session cookies, resource injection, or DOM updates, drive it through a browser and assert the observable page result.
 
 ## What To Unit Test
 
@@ -33,10 +33,10 @@ Good unit-test targets:
 Use e2e tests when the behavior exists because the runtime, browser, or client script is involved:
 
 - A hook mutates a `Source` and the DOM rerenders
-- `Bind`, `Effect`, `Route`, route-derived `Source`/`Beam`, or `RouterBeam` selects the right subtree
+- `Bind`, `Effect`, `Route`/`RouteBeam`, route-derived `Source`/`Beam`, or `RouteModelBeam` selects the right subtree
 - `ALink` updates the current instance, creates a new instance, or works with browser back/forward
 - Form/input/key/pointer capture settings affect event payloads
-- `Door.Inner`, `Door.Outer`, `Door.Static`, `Door.Reload`, or `X*` calls update the intended dynamic parent
+- `Door.Inner`, `Door.Outer`, `Door.Static`, or `Door.Reload` calls update the intended dynamic parent
 - Session and instance storage survive or disappear at the right lifecycle boundary
 - Head resources, scripts, styles, CSP, status, title, and meta are emitted correctly
 
@@ -231,7 +231,7 @@ Doors tests should usually wait for the final DOM state, not for an internal cha
 For runtime behavior, a good test has a visible precondition, a real browser action, and a visible postcondition.
 
 - For hook tests, click/type/submit the real DOM element. Do not call the handler function directly.
-- For user-action state tests, let the browser action mutate `Source`/`Lens`. Do not call `Update` directly unless direct state update is the behavior under test.
+- For user-action state tests, let the browser action mutate the `Source` (or derived source). Do not call `Update` directly unless direct state update is the behavior under test.
 - For `ALink`, click the rendered link. Do not replace a link test with `page.MustNavigate(...)`; direct URL entry is a separate test.
 - For `Door` updates, assert the mounted container and the changed child content. Do not only assert that some text appears somewhere.
 - For routing/history, assert both DOM and URL/history when those are part of the behavior.

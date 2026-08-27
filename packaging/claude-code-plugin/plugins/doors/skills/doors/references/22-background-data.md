@@ -1,22 +1,22 @@
 # Background Data
 
-Pushing data from external sources (Kafka, Watermill, WebSocket, polling) into Doors reactive state via background goroutines.
+Pushing data from external sources (Kafka, Watermill, WebSocket, polling) into Doors reactive state via background goroutines — and reacting to state changes from background goroutines via `Sub`/`Watch`.
 
 ## Which Scope?
 
 | Data is... | Scope | Where to start | Context |
 |------------|-------|---------------|---------|
-| Consumed by one component | Component | Component constructor or `Main()` | `DetachedContext(ctx)` |
-| Consumed by the whole page | Instance | Root component `Main()` | `DetachedContext(ctx)` or `InstanceContext(ctx)` |
+| Consumed by one component | Component | `Main()` via `doors.Go` or `OnReady` | `DetachedContext(ctx)` |
+| Consumed by the whole page | Instance | Root component `Main()` via `doors.Go` or `OnReady` | `DetachedContext(ctx)` or `InstanceContext(ctx)` |
 | Shared across pages/tabs | Session | App factory via `SessionStore.Init` | `SessionContext(ctx)` |
 
 ## Local: Component or Instance
 
-Start the goroutine where the data is consumed. Use `DetachedContext` to get a context that:
+Start the goroutine where the data is consumed. Register it with `doors.OnReady` so it runs only after the markup it feeds is enqueued for the client; the callback's context is `DetachedContext`-equivalent — it:
 
 - Stays bound to the current dynamic owner (component or instance)
 - Is detached from rendering frames (no deadlock)
-- Is canceled when the owner unmounts
+- Is canceled when the owner's content is cleared (replaced, unmounted, or frozen)
 
 ```go
 type Profile struct {
@@ -38,16 +38,17 @@ type profileView struct {
 
 elem (f profileView) Main() {
     ~~
-    ctx := doors.DetachedContext(ctx)
-    go f.poll(ctx, func(p Profile) {
-        f.profile.Update(ctx, p)
+    doors.OnReady(ctx, func(ctx context.Context) {
+        go f.poll(ctx, func(p Profile) {
+            f.profile.Update(ctx, p)
+        })
     })
     ~~
     ~(f.profile.Bind(f.showProfile))
 }
 
 elem (f profileView) showProfile(p Profile) {
-    <div>{p.Name}</div>
+    <div>~(p.Name)</div>
 }
 ```
 
@@ -68,14 +69,16 @@ elem (f profileView) showProfile(p Profile) {
 }))
 ```
 
-`doors.Go` uses `DetachedContext` internally. The goroutine stops when the owning component unmounts.
+`doors.Go` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery, so Door updates made inside always land after their host markup. Best-effort: if the cycle fails or is superseded, `f` never runs. Its context is equivalent to `DetachedContext` — canceled when the surrounding content is cleared.
+
+From imperative render code, `doors.OnReady(ctx, on)` gives the same timing guarantee: start streaming goroutines inside `on` so they never outrun the markup they target.
 
 ### DetachedContext vs InstanceContext
 
 - `DetachedContext` — keeps current dynamic ownership. Use when the goroutine needs to call Door methods (`Inner`, `Outer`) on the same Door it started from.
 - `InstanceContext` — switches ownership to the root of the instance. Use when the goroutine should outlive the current dynamic owner but still stop when the page closes.
 
-Both are detached from rendering frames. Neither can be used for `Beam.Read`, `Beam.Sub`, `Beam.Effect`, or `Beam.Bind` — those need a render context.
+Both are detached from rendering frames. `Beam.Read`, `Sub`, `ReadAndSub`, and `Watch` work on them; subscriptions are owned by the dynamic owner (`DetachedContext`) or the instance root (`InstanceContext`). Only `Beam.Effect` and `Beam.Bind` belong in render code.
 
 ## Session-Scoped
 
@@ -130,24 +133,40 @@ elem (a App) Main() {
 
 All pages in the session share the same `Source`. When it updates, every bound fragment across every tab re-renders.
 
+### Reacting to state from the background (UI → external)
+
+Background goroutines can consume state, not only produce it: `Sub`, `ReadAndSub`, and `Watch` work on `SessionContext` and other non-instance contexts. Such subscriptions attach directly to the source and end when the callback returns `true` or the context is canceled (session end).
+
+```go
+sctx := doors.SessionContext(ctx)
+filters.Sub(sctx, func(ctx context.Context, f Filters) bool {
+    feed.Resubscribe(f) // adjust the external subscription to follow UI state
+    return false
+})
+```
+
+Use `Watch` when you need to cancel the subscription explicitly — it returns a `context.CancelFunc`.
+
 ### SessionContext API compatibility
 
-`SessionContext` allows mutations but not reads requiring render context:
+`SessionContext` carries the session and nothing else — user context values are dropped, and instance-scoped APIs panic:
 
 | ✅ OK | ❌ NOT OK |
 |-------|-----------|
-| `Source.Update` / `Source.Mutate` | `Source.Read` / `Source.ReadAndSub` |
-| `Source.Get` / `Beam.Get` | `Beam.Read` / `Beam.ReadAndSub` |
-| Door methods (`Inner`, `Outer`, etc.) | `Beam.Sub` / `Beam.Effect` / `Beam.Bind` |
-| `SessionStore` | `InstanceStore` |
+| `Source.Update` / `Source.Mutate` | `Beam.Effect` / `Beam.Bind` (render-only) |
+| `Beam.Read` / `ReadAndSub` / `Sub` / `Watch` | `InstanceStore` |
+| `Source.Get` / `Beam.Get` | `doors.Reload` |
+| Door methods (`Inner`, `Outer`, etc.) | instance-scoped helpers (`InstanceID`, `IDNumber`, ...) |
+| `SessionStore` | |
 
 ## Rules
 
 - Always use a Doors-derived context (`DetachedContext`, `InstanceContext`, `SessionContext`), never `context.Background()`.
 - Always handle `ctx.Done()` — the goroutine must stop when the context cancels.
-- Do not call `Beam.Read`, `Beam.Sub`, `Beam.Effect`, or `Beam.Bind` from background goroutines. These need a render context.
-- `Source.Update` and `Source.Mutate` work from any context. `Source.Get`/`Beam.Get` also work anywhere (returns latest value, no consistency guarantees).
-- Door handle methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`) work from detached and session contexts.
+- `Beam.Effect` and `Beam.Bind` are render-only. `Read`, `Sub`, `ReadAndSub`, and `Watch` work from any context; subscriptions made outside an instance end when their context is canceled.
+- `Source.Update` and `Source.Mutate` work from any context and return an optional `<-chan error` completion channel. `Source.Get`/`Beam.Get` also work anywhere (latest value, no consistency guarantees).
+- Start goroutines that push into freshly rendered content via `doors.Go` or `doors.OnReady` — their updates then land after the host markup.
+- Door handle methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`, `Freeze`) work from detached and session contexts and return an optional `<-chan error`.
 - For session-scoped state, always use `SessionStore.Init` in the app factory — it guarantees one goroutine per session regardless of how many pages are open.
 - Do not start session-scoped goroutines from component `Main()` — they would multiply per page instance.
 

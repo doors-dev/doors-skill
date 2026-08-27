@@ -2,16 +2,17 @@
 
 Client-side effects triggered from Go. Use when the browser should do something imperative (scroll, emit to JS, hard navigate, timed indication).
 
-Prefer normal rendering/state for durable UI changes. Prefer `AShared` for shared attributes across elements.
+Prefer normal rendering/state for durable UI changes. Prefer `Setter` for shared attributes across elements.
 
 ## Trigger Points
 
 ```go
-// Fire-and-forget (no result)
+// Error channel optional; ignore it for fire-and-forget
 doors.Call(ctx, action)
 
-// With result channel (don't wait during render)
-ch := doors.XCall[T](ctx, action)
+// Capture the client result with Into (don't wait during render)
+var v T
+ch := doors.Call(ctx, doors.ActionEmit[T]{Name: "n", Arg: arg}.Into(&v))
 
 // Event attrs: Before, r.After(...), OnError
 ```
@@ -21,13 +22,13 @@ ch := doors.XCall[T](ctx, action)
 ### ActionEmit — call JS handler
 
 ```go
-type ActionEmit struct {
+type ActionEmit[T any] struct {
     Name string   // name registered with $on(name, handler)
-    Arg  any      // argument passed to handler
+    Arg  any      // string → string, []byte → ArrayBuffer, else JSON; nil → null
 }
 ```
 
-Handler search walks outward through the Door tree — nearest matching handler wins. Handlers must be synchronous (returning a Promise fails the action).
+Handler lookup starts at the Door the action is dispatched from and walks out to the root — nearest matching handler wins. The action fails when no handler is reachable. Handlers may return a value or a Promise; the resolved value is what `Into` decodes.
 
 When `ActionEmit` runs from `OnError`, the `$on(...)` handler receives the hook error as its second argument: `(arg, err)`.
 
@@ -40,7 +41,7 @@ type ActionScroll struct {
 }
 ```
 
-Scrolls the first matching element into view. If no element matches, nothing happens.
+Scrolls the first matching element into view. If no element matches, the action fails (error on the completion channel).
 
 ### ActionIndicate — fixed-duration indication
 
@@ -51,7 +52,7 @@ type ActionIndicate struct {
 }
 ```
 
-Not tied to request lifecycle. Lasts for `Duration`. Use with `SelectorTarget()` cautiously — from `Call`/`XCall` there is no event target.
+Not tied to request lifecycle. Lasts for `Duration`. Only Query/QueryAll indicator variants apply here — an event element exists only in event attr and `ALink` action lists, not in a direct `Call`.
 
 ### Location actions — hard navigation (full page load)
 
@@ -59,7 +60,8 @@ Not tied to request lifecycle. Lasts for `Duration`. Use with `SelectorTarget()`
 type ActionLocationReload struct{}                         // reload current page
 type ActionLocationAssign struct{ Model any }             // push + load model
 type ActionLocationReplace struct{ Model any }            // replace + load model
-type ActionLocationRawAssign struct{ URL string }         // literal URL
+type ActionLocationRawAssign struct{ URL string }         // literal absolute URL, push
+type ActionLocationRawReplace struct{ URL string }        // literal absolute URL, replace history entry
 ```
 
 For in-app navigation, prefer `ALink` or updating the `RouteModel` source.
@@ -80,20 +82,20 @@ r.After(doors.JoinActions(
 ))
 ```
 
-## XCall Results
+## Call Results
 
 ```go
-type CallResult[T any] struct {
-    Ok  T
-    Err error
-}
-ch := doors.XCall[string](ctx, doors.ActionEmit{Name: "pick", Arg: "hello"})
-res, ok := <-ch  // ok==false when canceled
+var picked string
+ch := doors.Call(ctx, doors.ActionEmit[string]{Name: "pick", Arg: "hello"}.Into(&picked))
+err, ok := <-ch  // ok==false when canceled; picked valid after nil
 ```
 
-- Cancel `ctx` → best-effort cancellation, channel closes without value
+- `Call(ctx, action) <-chan error`: nil = success, error = build/client/decode failure, closed empty = canceled
+- Match failures with `errors.Is`: `ErrExecution` = action reached the browser and failed there, `ErrTerminated` = instance ended first; location actions can also yield `ErrPathModel`/`ErrPathEncode` (see [routing](./05-routing.md))
+- `ActionEmit[T]` declares its result type; `.Into(&dst)` arms decoding. Fire-and-forget: `ActionEmit[any]{...}` without Into
+- `Emitter` event methods return `ActionInto[int]` — `.Into(&n)` captures hook requests triggered (any failure fails the call); `Setter.Set` counts live elements reached. See [element handles](./17-element-handles.md).
+- Into has no effect inside Before/After/OnError lists (no result transport)
 - Don't wait during render — use `Go` or goroutine with `DetachedContext`
-- For most actions use `json.RawMessage` as `T`; `ActionEmit` is the main case for real types
 
 ## OnError
 
@@ -102,8 +104,8 @@ res, ok := <-ch  // ok==false when canceled
 ## Rules
 
 - Prefer rendering/state over actions for durable UI changes
-- `Call` for fire-and-forget, `XCall` mainly with `ActionEmit`
-- `$on(...)` handlers must stay synchronous
+- Ignore the `Call` error channel for fire-and-forget; capture results with `Into`
+- `$on(...)` handlers may return a Promise
 - Location actions = hard navigations (full reload). Use `ALink`/mutate source for in-app.
 - Actions run in order within a list. Location actions deferred to end of current client turn.
 
@@ -112,4 +114,4 @@ res, ok := <-ch  // ok==false when canceled
 - [javascript.md](./15-javascript.md) — `$on`, `ActionEmit`
 - [indication.md](./12-indication.md) — `ActionIndicate`, indicator types
 - [navigation.md](./10-navigation.md) — `ALink` vs location actions
-- [shared-attr.md](./17-shared-attr.md) — `AShared` as alternative to actions
+- [shared-attr.md](./17-element-handles.md) — element handles: `Setter`, `Emitter` and their `ActionInto[int]` semantics

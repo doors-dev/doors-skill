@@ -16,7 +16,7 @@ GoX compiles `.gox` templates to `.go`. Write HTML-like templates as typed Go ex
 
 ## Prerequisites
 
-Run `gox ver` first — it must print a version (e.g. `v0.1.36`). Without `gox` on `PATH`, generation fails and builds error with `undefined: example` for every template.
+Run `gox ver` first — it must print a version (e.g. `v0.3.0`). Without `gox` on `PATH`, generation fails and builds error with `undefined: example` for every template.
 
 Install:
 - **Prebuilt binary (recommended):** download from [GitHub Releases](https://github.com/doors-dev/gox/releases), put on `PATH`.
@@ -30,11 +30,13 @@ The Go module side is automatic: `go get github.com/doors-dev/gox` (or just `imp
 - VS Code: [`doors-dev/vscode-gox`](https://marketplace.visualstudio.com/items?itemName=doors-dev.gox)
 - Neovim: [`doors-dev/nvim-gox`](https://github.com/doors-dev/nvim-gox)
 
+## Doors stack
+
 Do not install or use `goxx` (`gox` extension package). Use Doors helper APIs for class composition, parallel render fragments, resources, actions, events, and attributes.
 
 ## Golden rule
 
-**Always edit `.gox` files. Never edit/hand-write `.x.go` files. Never write templates in cursor style directly.** `.x.go` is overwritten on every `gox gen` (and by the language server on save). The cursor API is for runtime extension points (`Editor`, `Proxy`, `Printer`, custom `Modify`), not authoring.
+**Always edit `.gox` files. Never edit/hand-write `.x.go` files. Never write templates in cursor style directly.** `.x.go` is overwritten on every `gox gen` (and by the language server on save). The cursor API is for runtime extension points (`Proxy`, `Printer`, custom `Modify`, hand-written low-level `Elem`/`Comp`), not authoring.
 
 Don't:
 - Hand-write `gox.Elem(func(cur gox.Cursor) error { ... })` as authoring style — that's what `.gox` compiles *to*.
@@ -49,6 +51,8 @@ gox gen           # regenerate .x.go for current directory
 gox gen ./pkg     # regenerate a specific path
 go run .          # build/run as normal Go
 ```
+
+`gox fmt` and `gox gen` accept **any number of file, directory, or recursion operands** (`./...`, `pkg/...`); default `.`. A directory is processed recursively (`./pkg` ≡ `./pkg/...`), so `gox gen .` from the repo root regenerates every package in one shot. `.gitignore` is respected unless `-no-ignore`. Other flags: `-check` (report files needing work, exit non-zero, write nothing), `-force` (gen: overwrite generated files without checking), `-no-go` (fmt: format `.gox` only). Other subcommands: `gox ver` (version), `gox srv` (language server, the default when run bare).
 
 After editing `.gox`, run `gox gen` before `go build`/`go run`/`go test`. "undefined: MyElem" usually means missing regen.
 
@@ -375,7 +379,7 @@ Standard HTML void tags (`<br>`, `<hr>`, `<img>`, `<input>`, `<meta>`, `<link>`,
 
 ### Reading helper docs: naming -> syntax
 
-- **`AttrMod` / "modifier"** → modifier syntax: `<tag (x)>`.
+- **`Modify` / `doors.Attr` / "modifier"** → modifier syntax: `<tag (x)>`.
 - **`Proxy`** → proxy syntax: `~>(x) nextItem`.
 - **Both** (e.g. `doors.Class`, `doors.A...` event attrs) → **default to modifier**. Use proxy only when you can't reach the target tag (wrapping a component whose outer tag you don't author):
   ```gox
@@ -390,7 +394,7 @@ Run on individual attribute *values* (not the whole attribute set):
 
 ```go
 type Mutate interface {
-    Mutate(name string, prev any) (newValue any)  // combine with previous value under same name
+    Mutate(name string, value any) any  // combine with previous value under same name; value is nil when unset
 }
 type Output interface {
     Output(w io.Writer) error  // value renders into attribute slot; GoX still escapes
@@ -411,6 +415,8 @@ Escape the two characters GoX treats specially in template text by rendering str
 ~"~"   // renders ~
 ~"}"   // renders an unmatched }
 ```
+
+**Inside `<script>` and `<style>`, the body is JS/CSS, not template text.** Write normal JavaScript/CSS — `~`, `{`, and `}` are *not* special there, so braces, arrow functions, object literals, and template literals need no escaping. `gox fmt` even formats the embedded JS/CSS. (Interpolation via `~(...)` does not work inside a script/style body; pass server values in with `data:name=(expr)` and read them with `$data("name")` — see [javascript.md](./15-javascript.md).)
 
 Raw block `<:>...</:>` emits literal HTML, whitespace preserved verbatim:
 ```gox
@@ -560,7 +566,7 @@ A `Proxy` captures the next renderable item at render time (element, component p
 
 Chain: `~>(p1) ~>(p2) item` ≡ `~>(p1, p2) item`. Outermost first; `p2` wraps the original, then `p1` wraps the result.
 
-Doors proxies include `doors.Parallel`, `doors.Class` as proxy, `doors.ProxyMod`, `doors.A...` event attrs, and `doors.Door`. Import and attach them.
+Doors proxies include `doors.Parallel`, `doors.Ctx`, `doors.Class` as proxy, `doors.ProxyMod`, `doors.A...` event attrs, and `doors.Door`. Import and attach them.
 
 **Don't write a custom `Proxy` unless you truly need a low-level rendering transform.** Last resort. To wrap content -> component/slot. To set attributes -> `Modify`. To attach attributes through a wrapping component -> `doors.ProxyMod` or `doors.Class`. Custom proxies require careful cursor lifecycle.
 
@@ -596,29 +602,43 @@ For one-offs: `gox.ProxyFunc(func(cur, e) error { ... })`.
 
 ### Raw HTML
 
-`<:>...</:>` for static raw. For programmatic raw output, drop an `Editor` through a placeholder:
+`<:>...</:>` for static raw. For programmatic raw output, drop a hand-written `gox.Elem` through a placeholder:
 ```gox
-~(gox.EditorFunc(func(cur gox.Cursor) error {
+~(gox.Elem(func(cur gox.Cursor) error {
     return cur.Raw("<mark>unescaped</mark>")
 }))
 ```
 
 Never pipe untrusted input through these.
 
+## Rendering at runtime
+
+`gox.Elem` is `func(cur gox.Cursor) error`; it implements `gox.Comp` (returns itself from `Main`) and is templ-compatible.
+
+```go
+el := Greeting("World")
+el.Render(ctx, w)        // writes HTML to io.Writer via the default Printer
+el.Print(ctx, printer)   // streams jobs to a custom Printer
+```
+
+In Doors apps the framework renders pages — direct `Render` is for tests or offline HTML. `doors.Door` is a plain `gox.Comp`: template usage `~(&door)`; hand-written low-level code renders it with `cur.Comp(&door)` (`door.Edit(cur)` no longer exists).
+
+`~(expr)` dispatches via `Cursor.Any` (`Many` for multi-arg), tried in order: `string`/`[]string`, `gox.Elem`/`[]gox.Elem`, `gox.Comp`/`[]gox.Comp`, `gox.Job`/`[]gox.Job`, `func(cur gox.Cursor) error` (rendered as `Elem`), `gox.Templ` (`Render(ctx, w) error`), `[]any`. Anything else: escaped `fmt.Fprint`. Nil interface values render nothing.
+
 ## Runtime extension interfaces
 
 Reach for these only when ordinary templating can't express the need. They live in `.go` files, not `.gox`.
 
-- `gox.Editor` — `Edit(cur gox.Cursor) error`. Direct cursor for low-level emission. Use `gox.EditorFunc` for one-offs.
+- `gox.Elem` / `gox.Comp` — a hand-written `Elem` (`func(cur gox.Cursor) error`) receives the rendering cursor directly for low-level emission; components expand on the caller's cursor via `cur.Comp`.
 - `gox.Proxy` — `Proxy(cur gox.Cursor, e gox.Elem) error`. Intercepts next renderable. Prefer existing proxies.
 - `gox.Modify` — `Modify(ctx, tag, attrs Attrs) error`. Head-level attribute transformer (`<tag (Modifier)>`). Use `gox.ModifyFunc`.
-- `gox.Mutate` — `Mutate(name, prev any) any`. Value-level: combine with existing attribute under same name.
+- `gox.Mutate` — `Mutate(name, value any) any`. Value-level: combine with existing attribute value under same name (`value` nil when unset).
 - `gox.Output` — `Output(w io.Writer) error`. Value controls own serialization (still escaped).
-- `gox.Printer` — consumes the `Job` stream. Custom printers can buffer/transform/reroute.
+- `gox.Printer` — `Send(j Job) error`, consumes the `Job` stream. Custom printers can buffer/transform/reroute.
 
-**Cursor lifecycle when writing `Editor` / low-level code:**
-1. Regular: `Init(tag)` → `AttrSet`/`AttrMod` → `Submit()` → children → `Close()`.
-2. Void: `InitVoid(tag)` → `AttrSet` → `Submit()` (no `Close`).
+**Cursor lifecycle when writing low-level code:**
+1. Regular: `Init(tag)` → `Set`/`Modify` → `Submit()` → children → `Close()`.
+2. Void: `InitVoid(tag)` → `Set`/`Modify` → `Submit()` (no `Close`).
 3. Container: `InitContainer()` → children → `Close()` (no tag).
 
 Before `Submit()` you may mutate attributes; after, the head is frozen but children may be emitted.
@@ -717,7 +737,7 @@ Captured item must begin with an element/component/container that resolves to an
 16. **`~(...)` in attribute** — text/template positions only. Use `id=(id)`, `checked=({ ... })`.
 17. **Called `attrs.Set(...)` in `Modify`** — method is `attrs.Get(name).Set(value)`.
 18. **`</br>` / `</input>`** — void tags have no closing. Use `<br>`, `<br/>`, `<br />`.
-19. **Unescaped via `~(trustedHTML)`** — that escapes. `<:>...</:>` or `gox.EditorFunc + cur.Raw` for trusted only.
+19. **Unescaped via `~(trustedHTML)`** — that escapes. `<:>...</:>` or a hand-written `gox.Elem` + `cur.Raw` for trusted only.
 20. **Whitespace between placeholders** — `~(a) ~(b)`, `~(a)~(b)` have no space, `~(a, " ", b)` has.
 21. **Expected raw template indentation/newlines** — normalized. Intentional spaces preserved. Use raw blocks for verbatim.
 22. **Expected proxy to capture multiple siblings** — captures one. Group via fragment/wrapper/multi-value placeholder.

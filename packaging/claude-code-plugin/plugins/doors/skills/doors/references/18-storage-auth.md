@@ -220,7 +220,7 @@ app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Comp {
         auth.ExchangeCode(r, code)
     }
     return App{}
-}
+})
 ```
 
 ## Instance Storage

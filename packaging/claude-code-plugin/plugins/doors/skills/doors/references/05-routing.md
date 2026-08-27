@@ -49,10 +49,12 @@ elem (a App) Main() {
 
 ```go
 type Location struct {
-    Segments []string
-    Query    url.Values
+    Segments []string   `json:"segments"`
+    Query    url.Values `json:"query"`
 }
 ```
+
+`Location` marshals to JSON with `segments`/`query` keys; nil `Segments`/`Query` encode as `[]`/`{}`, not `null`.
 
 ## Path Models
 
@@ -189,7 +191,7 @@ type Path struct {
     Page    *int     `query:"page"`
 }
 ```
-Uses [go-playground/form v4](https://github.com/go-playground/form/tree/v4.2.1) with `query` tag in explicit mode. Pointer = optional (nil when absent).
+Uses [go-playground/form v4](https://github.com/go-playground/form) with `query` tag in explicit mode. Pointer = optional (nil when absent).
 
 ### Raw Query
 
@@ -206,10 +208,12 @@ Don't mix `url.Values` field with `query` tags.
 ### Top-Level
 
 ```go
-func Route(routes ...RouteSource[Location]) gox.EditorComp         // writable routes for current URL
+func Route(routes ...RouteSource[Location]) gox.Elem         // writable routes for current URL
 func RouteModel[M any, C gox.Comp](render func(Source[M]) C) RouteSource[Location]  // decode URL into model
 func RouteModelBeam[M any, C gox.Comp](render func(Beam[M]) C) RouteBeam[Location] // read-only model route
 ```
+
+Routes are tried in order; a branch rerenders only when the matching route changes. If no route matches, nothing renders.
 
 ### Fallbacks
 
@@ -274,9 +278,11 @@ Use `.Source(set, render)` on `RouteDerive` only when the child must write the d
 For routing on any `Source[T]` or `Beam[T]` (not just `Location`):
 
 ```go
-source.Route(routes ...RouteSource[T]) gox.EditorComp
-beam.RouteBeam(routes ...RouteBeam[T]) gox.EditorComp
+source.Route(routes ...RouteSource[T]) gox.Elem
+beam.RouteBeam(routes ...RouteBeam[T]) gox.Elem
 ```
+
+`RouteBeam[T]` routes are accepted wherever `RouteSource[T]` is; a `.Source(...)` route is not accepted by `Beam.RouteBeam`.
 
 **Match builders** (in order: general -> specific):
 ```go
@@ -316,6 +322,8 @@ func RouteDefaultBind[T any, C gox.Comp](render func(T) C) RouteBeam[T]     // s
 func Router(ctx context.Context) Source[Location]  // current URL as writable source
 ```
 
+`ctx` must belong to a Doors render or handler; otherwise `Router` panics. Updates to a location with the same path and query are suppressed.
+
 `Location` contains reference types (`Segments []string`, `Query url.Values`). Don't mutate — clone first:
 ```go
 loc := doors.Router(ctx).Get().Clone()
@@ -325,11 +333,10 @@ loc := doors.Router(ctx).Get().Clone()
 
 You can redirect or adjust the initial URL by mutating `doors.Router(ctx)` in the page function passed to `doors.NewApp`. The browser URL is replaced and the app observes the new location as the initial state:
 ```go
-func AppPage(w http.ResponseWriter, r *http.Request) gox.Comp {
-    ctx := r.Context()
+app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Comp {
     doors.Router(ctx).Update(ctx, doors.Location{Segments: []string{"login"}})
     return App{}
-}
+})
 ```
 
 **Important:** To read the current location before deciding whether to redirect, use `Get()` — unlike `Read`, it does not freeze the observable value for the render cycle. Place any `Sub` or `ReadAndSub` calls **after** the mutation.
@@ -345,6 +352,8 @@ type LocationEncoder interface {
     Encode() (Location, error)
 }
 ```
+
+Error sentinels, matched with `errors.Is`: `ErrPathModel` = invalid path model definition (bad tags, wrong field types, unexported fields); `ErrPathEncode` = model failed to encode into a location (no variant selected, empty required capture). Returned by `NewLocation` and wrapped by location actions / `ALink` model encoding.
 
 ## Multiple Models
 

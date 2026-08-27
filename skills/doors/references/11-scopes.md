@@ -82,15 +82,15 @@ Cancellation is client-side. The previous request may already have reached the s
 
 ### ScopeFrame
 
-Separate normal events from a barrier event.
+Separate ordinary events from a barrier event that runs alone.
 
 ```go
 frame := &doors.ScopeFrame{}
-frame.Scope(false) // normal event — waits for earlier, can overlap with other normals
-frame.Scope(true)  // frame event — waits for all, blocks new events while pending/running
+frame.Scope(false) // ordinary — runs immediately, may overlap with other ordinaries
+frame.Scope(true)  // barrier — waits for running events, then runs alone
 ```
 
-A frame event waits for earlier events in the same shared frame scope. Once the frame event is pending or running, new events in that frame scope are blocked.
+A barrier waits for the events already running in the scope, then runs while every new event in the scope — ordinary or another barrier — is rejected.
 
 ### ScopeConcurrent
 
@@ -134,6 +134,8 @@ Each scope sees the event only after the previous accepted it.
 
 - Client-side only — shapes whether/when a request is sent
 - Not a backend permission or one-shot guarantee
+- A rejected or replaced request is never sent — its handler does not run and its indication does not start
+- A scope stays occupied while its request is pending; `doors.HoldSettle(ctx)` in the handler keeps it (and the indicator) pending until release
 - Pair with indication for polished UX
 - `ScopeBlocking` is the simplest "prevent double-submit"
 - `ScopeRate` throttles events to a fixed minimum interval; first fires immediately, cooldown is not reset by new arrivals
@@ -143,3 +145,4 @@ Each scope sees the event only after the previous accepted it.
 
 - [events.md](./09-events.md) — Event attr `Scope` field
 - [indication.md](./12-indication.md) — `Indicator` pairs naturally with scopes
+- [door.md](./07-door.md) — `HoldSettle`

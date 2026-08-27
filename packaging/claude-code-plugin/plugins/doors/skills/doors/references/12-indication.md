@@ -40,6 +40,8 @@ doors.IndicateAttrQuery("#loader", "aria-busy", "true")
 doors.IndicateClassQueryAll(".row", "pending")
 ```
 
+Target and parent selectors need an event element and select nothing without one — for `AHook`/`ARawHook` calls and `ActionIndicate` outside event attr or `ALink` action lists, only the `Query`/`QueryAll` variants apply.
+
 ## Struct Form
 
 For shared selectors or multiple changes:
@@ -52,6 +54,8 @@ Indicator: doors.JoinIndicators(
     doors.IndicatorContent{Selector: sel, Content: "Saving..."},
 )
 ```
+
+`Selector` is optional; the zero value selects the event element.
 
 ## Selectors
 
@@ -68,6 +72,7 @@ func SelectorQueryParent(q string) Selector // closest ancestor match
 - On request end: temporary attributes removed, added classes removed, removed classes restored, content put back
 - Overlapping indications on same element queue — when one ends, next takes over
 - Fields the next indication doesn't touch fall back to original value (not previous indication's value)
+- A handler can keep the request — and its indication — pending past its return with `doors.HoldSettle(ctx)`; the indicator is restored when the hold is released. See [door.md](./07-door.md)
 
 ## Combining
 
@@ -82,8 +87,8 @@ Fixed-duration indication, not tied to request lifecycle:
 
 ```go
 doors.ActionIndicate{
-    Indicator: doors.IndicateClass("pending"),
-    Duration:  300 * time.Millisecond,
+    Indicator: doors.IndicateClass("pending"),  // required
+    Duration:  300 * time.Millisecond,          // required; truncated to ms
 }
 ```
 See [actions.md](./13-actions.md).
@@ -93,3 +98,4 @@ See [actions.md](./13-actions.md).
 - [events.md](./09-events.md) — `Indicator` field on event attrs
 - [navigation.md](./10-navigation.md) — `Active.Indicator` on links
 - [scopes.md](./11-scopes.md) — Scopes pair with indication for polished UX
+- [door.md](./07-door.md) — `HoldSettle` keeps indication pending

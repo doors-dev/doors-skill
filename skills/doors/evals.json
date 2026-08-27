@@ -1,5 +1,5 @@
 {
-  "version": "0.1.15",
+  "version": "0.2.0",
   "skill": "doors",
   "cases": [
     {
@@ -143,7 +143,7 @@
         "references/05-routing.md"
       ],
       "grading_assertions": [
-        "Uses doors.NewApp with a per-request page factory that returns the root component.",
+        "Uses doors.NewApp with a page factory, run once per page instance, that returns the root component.",
         "Attaches middleware or static file serving through the documented App APIs.",
         "Keeps app routing in the rendered component tree instead of turning NewApp's factory into the router.",
         "Uses the documented configuration options for CSP, timeouts, server ID, or local cookie behavior."
@@ -207,7 +207,7 @@
         "Pushes backend updates into Source or another documented reactive primitive.",
         "Uses the correct Doors runtime context for state updates and lifecycle-bound work.",
         "Avoids unsafe mutation of plain shared Go state from the polling goroutine.",
-        "Uses GoX control flow documented by the bundled GoX reference; does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return."
+        "Uses GoX control flow documented by the bundled GoX reference; does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~({ ... }) GoX inline expression whose switch cases return."
       ]
     },
     {
@@ -280,17 +280,17 @@
       "expected_references": [
         "references/00-gox.md",
         "references/20-head-status.md",
-        "references/17-shared-attr.md",
+        "references/17-element-handles.md",
         "references/05-routing.md",
         "references/06-state.md"
       ],
       "grading_assertions": [
         "Uses the documented head/title/meta API rather than hand-writing unrelated browser JavaScript.",
         "Sets initial HTTP status from the rendered route fallback.",
-        "Uses AShared when one attribute should be shared across multiple elements.",
+        "Uses Setter when attributes should be shared across multiple elements.",
         "Keeps route fallback behavior separate from authorization decisions.",
-        "Uses GoX control flow documented by the bundled GoX reference; does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~func inline expression whose switch cases return.",
-        "Does not call AShared Enable/Disable from a render block merely to correct initial attribute state."
+        "Uses GoX control flow documented by the bundled GoX reference; does not invent unsupported placeholder forms such as ~(switch ...) and uses either if/else-if or a ~({ ... }) GoX inline expression whose switch cases return.",
+        "Does not dispatch Setter actions from a render block merely to correct initial attribute state; initial attributes belong in the markup."
       ]
     },
     {
@@ -343,7 +343,7 @@
         "Edits the .gox source and does not manually edit generated .x.go files.",
         "Uses GoX control flow and Doors event attrs with valid modifier or proxy syntax.",
         "Does not wrap plain text branches in empty fragments such as <>text</> inside ~(if); writes text directly or uses real markup when markup is needed.",
-        "Uses documented if/for placeholders, or a ~func inline expression whose switch cases return, instead of inventing unsupported placeholder forms."
+        "Uses documented if/for placeholders, or a ~({ ... }) GoX inline expression whose switch cases return, instead of inventing unsupported placeholder forms."
       ]
     },
     {

@@ -31,7 +31,7 @@ Latest mounted render wins. When dynamic owner unmounts, Doors removes its title
 ## Status
 
 ```go
-func Status(statusCode int) gox.Editor
+func Status(statusCode int) gox.Elem
 ```
 
 Sets HTTP status for **initial page response only**. Can render anywhere. Later reactive updates can't change the already-sent status code.

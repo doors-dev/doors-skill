@@ -38,7 +38,7 @@ Auto-wrapped with:
 - `$data(name)` — read server-provided values (string/JSON → direct, `[]byte` → `Promise<ArrayBuffer>`)
 - `$hook(name, arg?)` — call Go handler, returns promise. Throws `HookErr` on failure. Check `instanceof HookErr` to distinguish framework errors from other errors.
 - `$fetch(name, arg?)` — call Go handler, returns raw `Response`
-- `$on(name, handler)` — register JS handler for `ActionEmit`. Must be synchronous. Receives `(arg, err)` — `err.kind` tells failure type.
+- `$on(name, handler)` — register JS handler for `ActionEmit`. May return a value or a Promise; the resolved value is delivered to `Into`. Receives `(arg, err)` — `err` set only for `OnError`-dispatched emits, `err.kind` tells failure type.
 - `$sys.ready()` — promise that resolves when the page is loaded and runtime initialized. All framework APIs (`$data`, `$hook`, `$fetch`, `$on`) already wait for readiness internally, so this is only needed for non-framework operations that depend on the runtime.
 - `$sys.clean(fn)` — register cleanup on unmount (timers, listeners)
 - `$sys.activateLinks()` — re-scan `ALink` elements to apply active-link indication. Useful after JavaScript-driven URL fragment changes.
@@ -103,23 +103,25 @@ Do not hardcode reusable component IDs such as `id="modal"` or `id="root"` insid
 
 ```go
 type AHook[T any] struct {
-    Name      string
-    Scope     Scopes
-    Indicator Indicators
-    On        func(ctx context.Context, r RequestHook[T]) (any, bool)
+    Name           string
+    Scope          Scopes
+    Indicator      Indicators
+    RequestTimeout time.Duration  // overrides Conf.RequestTimeout for this hook
+    On             func(ctx context.Context, r RequestHook[T]) (any, bool)
 }
 ```
 
-Return value marshaled to JSON. Return `false` to keep hook, `true` to remove.
+Return value marshaled to JSON. Return `false` to keep hook, `true` to remove. `On` optional — nil answers `null` (body discarded, hook stays).
 
 ### Raw
 
 ```go
 type ARawHook struct {
-    Name      string
-    Scope     Scopes
-    Indicator Indicators
-    On        func(context.Context, RequestRawHook) bool
+    Name           string
+    Scope          Scopes
+    Indicator      Indicators
+    RequestTimeout time.Duration
+    On             func(context.Context, RequestRawHook) bool
 }
 ```
 For raw body access, multipart, custom responses.
@@ -142,12 +144,13 @@ Request body auto-detected: `undefined` (no body), `FormData` (multipart), `URLS
     $on("alert", (message, err) => {
         if (err) { console.log(err.kind); return }
         window.alert(message)
-        return "ok"
+        return "ok"            // delivered to ActionEmit[string].Into
     })
+    $on("confirm", async (q) => await showDialog(q))  // Promise OK
 </script>
 ```
 
-Handler found by searching the current dynamic node and up the tree. Returns the first match in the current subtree.
+Lookup starts at the Door the `ActionEmit` is dispatched from and walks out to the root — nearest registered handler wins; the action fails when none is reachable. A returned Promise resolves to the action result.
 
 ## Modules
 
@@ -161,7 +164,33 @@ Handler found by searching the current dynamic node and up the tree. Returns the
 </script>
 ```
 
-Preload without execution:
+`specifier="app"` registers the module in the page's import map under that name, so any managed script can `await import("app")` to get its exports. This is the whole point of `specifier` — it's how you reference a server-served module from client code. `specifier` is only valid on modules (a `<script type="module">` or a `<link rel="modulepreload">`); using it elsewhere is an error.
+
+### Pre-bundled module as bytes
+
+When the module is **already a self-contained ESM bundle** (e.g. built by an external esbuild/Bun/Vite step and embedded with `//go:embed`), serve the bytes directly and skip `bundle` — there are no dependencies left for Doors to resolve:
+
+```go
+//go:embed dist/editor.js
+var EditorScript []byte // already-bundled ESM, exports createEditor
+```
+
+```gox
+<link rel="modulepreload" href=(EditorScript) specifier="editor" name="editor.js">
+```
+```gox
+<script>
+    const { createEditor } = await import("editor")
+    createEditor({ target: document.getElementById("editor") })
+</script>
+```
+
+`href=([]byte)` (or `src=`) becomes a cached, public script resource; with `specifier` set it is registered in the import map. Module format is the default for `modulepreload` and `type="module"`, so no `type`/`bundle` attrs are needed.
+
+- Use **`bundle`** only to make Doors' esbuild bundle dependencies *from source* (e.g. a `.tsx` entry that imports from `node_modules`).
+- Use a **plain pre-bundled `[]byte`/`ResourceLocalFS` module** (no `bundle`) when an external tool already produced the bundle.
+
+Preload without execution — a `modulepreload` link both preloads the bytes and (with `specifier`) registers the import-map entry, without running the module until something `import()`s it:
 ```gox
 <link rel="modulepreload" href=(resource) specifier="app">
 ```

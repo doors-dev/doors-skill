@@ -46,11 +46,9 @@ Compare to virtual DOM: you'd render the entire dashboard component tree, diff o
 ```go
 type Source[T any] interface {
     Beam[T]
-    Update(ctx context.Context, value T)
-    XUpdate(ctx context.Context, value T) <-chan error
-    Mutate(ctx context.Context, f func(T) T)
-    XMutate(ctx context.Context, f func(T) T) <-chan error
-    Route(routes ...RouteSource[T]) gox.EditorComp
+    Update(ctx context.Context, value T) <-chan error
+    Mutate(ctx context.Context, f func(T) T) <-chan error
+    Route(routes ...RouteSource[T]) gox.Elem
 }
 
 type Beam[T any] interface {
@@ -59,8 +57,8 @@ type Beam[T any] interface {
     Sub(ctx context.Context, onValue func(context.Context, T) bool) bool
     ReadAndSub(ctx context.Context, onValue func(context.Context, T) bool) (T, bool)
     Effect(ctx context.Context) (T, bool)
-    Bind(f func(T) gox.Elem) gox.EditorComp
-    RouteBeam(routes ...RouteBeam[T]) gox.EditorComp
+    Bind(f func(T) gox.Elem) gox.Elem
+    RouteBeam(routes ...RouteBeam[T]) gox.Elem
     Watch(ctx context.Context, w Watcher[T]) (context.CancelFunc, bool)
 }
 ```
@@ -189,7 +187,7 @@ elem (c counter) count(i int) {
 }
 ```
 
-Use when: you want explicit, self-documenting wiring between a value and its fragment.
+Use when: you want explicit, self-documenting wiring between a value and its fragment. If the render func returns nil, the fragment renders nothing.
 
 ### Effect — inline, multi-source reactivity
 
@@ -212,7 +210,7 @@ Use when: you prefer pulling values inline over declaring callback wiring, or wh
 
 Keep Effect boundaries small. An Effect is not a React component — it re-renders its entire container when any tracked value changes. It's normal and expected to have multiple Effect boundaries in a single component/element, each covering the narrowest set of values it needs. This aligns with the core idea: derive state to the smallest piece, update only what changed.
 
-Only check the last `ok` — `Effect` fails only on canceled context, so if the last succeeds, earlier ones did too.
+Only check the last `ok` — `Effect` fails only on a canceled context (or one outside an instance runtime), so in render code if the last succeeds, earlier ones did too.
 
 ### Route / RouteBeam — pick one view based on value
 
@@ -220,7 +218,7 @@ Only check the last `ok` — `Effect` fails only on canceled context, so if the 
 ~(s.section.Route(
     doors.RouteValue(SectionProfile).Comp(ProfilePanel{}),
     doors.RouteValue(SectionBilling).Comp(BillingPanel{}),
-    doors.RouteDefaultComp(ProfilePanel{}),
+    doors.RouteDefaultComp[Section](ProfilePanel{}),
 ))
 ```
 
@@ -241,7 +239,7 @@ A `Source` is also a `Beam`, so `source.RouteBeam(routes...)` is available when 
 
 **Default fallbacks** always match (place last):
 
-- `RouteDefaultComp(comp)` — fixed component
+- `RouteDefaultComp[T](comp)` — fixed component (explicit type argument required — `T` is not inferable)
 - `RouteDefaultBeam(render)` — read-only beam
 - `RouteDefaultBind(render)` — raw value (shorthand for RouteDefaultBeam + bind)
 - `RouteDefault(render)` — writable source, only inside `source.Route(...)`
@@ -257,20 +255,24 @@ beam.Sub(ctx, func(ctx context.Context, v T) bool {
 })
 ```
 
-`ReadAndSub(ctx, fn)` returns the current value as a return value; the callback fires only for subsequent updates. `Sub` fires immediately with the current value and again on every update. Both end when the callback returns `true` or the owning parent unmounts.
+`ReadAndSub(ctx, fn)` returns the current value as a return value; the callback fires only for subsequent updates. `Sub` fires immediately with the current value and again on every update. Both end when the callback returns `true` or the content that registered them is cleared. From a context outside an instance (`SessionContext`, background context) the subscription attaches directly to the source and ends when that context is canceled.
 
 ## Reading
 
-- `Read(ctx)` — render-consistent value, needs Doors context
+- `Read(ctx)` — value consistent with the current render/update cycle; any context allowed
 - `Get()` — latest stored value, no context, no consistency guarantees
 - `ReadAndSub(ctx, fn)` — current value + subscribe to future changes
-- `Sub(ctx, fn)` — subscribe to future changes only (no initial read)
+- `Sub(ctx, fn)` — subscribe; fires immediately with the current value, then on every update
+- `Watch(ctx, w)` — low-level subscription, returns a `context.CancelFunc`; prefer `Sub`/`ReadAndSub`
+
+Reading and subscribing work from any context. In a Doors context, subscriptions are owned by the surrounding dynamic content; outside an instance they end when the context is canceled.
 
 ## Updating
 
-- `source.Update(ctx, value)` — set new value
-- `source.Mutate(ctx, fn)` — compute from old value
-- `XUpdate`/`XMutate` — return completion channel (don't wait during render)
+- `source.Update(ctx, value)` — set new value; any context allowed
+- `source.Mutate(ctx, fn)` — compute from old value; `fn` may run more than once when a concurrent update lands first — keep it side-effect free
+- Both return an optional completion channel: nil = propagated, `context.Canceled` = superseded by a newer update, closed without a value = suppressed (equal value or no subscribers)
+- Never wait on the channel during render; to wait, use `doors.Go` or your own goroutine with `DetachedContext`
 
 ## Equality & Skipping
 

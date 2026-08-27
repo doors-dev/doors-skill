@@ -18,23 +18,31 @@ Declarative navigation on `<a>` elements:
 
 ```go
 Model    // required: path model, Location, or LocationEncoder
-Fragment // optional: #hash appended to URL
+Fragment // optional: #hash appended to URL, scrolled into view after successful navigation
 Active   // optional: rules for applying active-link indication
 StopPropagation // optional: stop the click event from bubbling
+HistoryReplace  // optional: replace current history entry instead of pushing a new one
 After    // optional: actions after successful navigation (ALink-specific field)
 // + all shared event lifecycle fields: Scope, Indicator, Before, OnError
 ```
 
-ALink uses `ScopeLatest("link")` scope internally. Default `OnError` is `ActionLocationReload{}`.
+All links share one built-in latest scope, so a new click cancels a pending navigation. `OnError` has no default — a failed navigation reverts the optimistic URL change (v0.14 defaulted nil `OnError` to `ActionLocationReload{}`; it no longer does).
 
 ### Behavior
 
 - Click intercepted → hook updates location source → page re-routes in place
 - ALink always navigates dynamically on normal clicks
+- A click that changes neither path nor query sends no request
 - `href` set from encoded model (for browser features: middle-click, Cmd-click, "open in new tab")
 - Opening in a new tab is a fresh initial request, like any other direct page load
 - Client updates browser URL to link `href` before hook runs
-- On error: default `OnError` is `ActionLocationReload{}` → browser loads the target URL
+
+### Failure Semantics
+
+- Canceled (by scope) or 404 (hook removed): URL reverts silently, `OnError` does not run
+- Gone 410 (instance stopped): page reloads at the new URL, `OnError` does not run
+- Network error or 5xx: URL reverts, `OnError` runs
+- 400 or other unexpected errors: URL stays at the new path, `OnError` runs
 
 ## Programmatic Navigation
 
@@ -56,6 +64,18 @@ Or update the raw location directly:
 ```go
 doors.Router(ctx).Update(ctx, newLocation)
 ```
+
+`Update`/`Mutate` return `<-chan error`; ignore for fire-and-forget.
+
+### History Replace
+
+A programmatic update pushes a new history entry by default. To replace the current entry instead, wrap the context:
+
+```go
+path.Update(doors.HistoryReplaceContext(ctx), Path{Section: SectionDashboard})
+```
+
+Honored on the `Router` source and any source derived from it (e.g. a `RouteModel` source); no effect on other sources. For links, use the `ALink.HistoryReplace` field.
 
 ## Active Link
 
@@ -123,7 +143,8 @@ Full page loads that bypass the Doors runtime. Use only when you intentionally n
 doors.ActionLocationReload{}                              // reload current page
 doors.ActionLocationAssign{Model: path}                   // push + load
 doors.ActionLocationReplace{Model: path}                  // replace + load
-doors.ActionLocationRawAssign{URL: "https://..."}         // literal URL
+doors.ActionLocationRawAssign{URL: "https://..."}         // literal URL, push
+doors.ActionLocationRawReplace{URL: "https://..."}        // literal URL, replace history entry
 ```
 
 ## Related

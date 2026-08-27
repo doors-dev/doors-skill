@@ -44,6 +44,8 @@ func (c Classes) String() string                      // rendered class string
 
 Tailwind note: Doors does not run Tailwind generation. Keep the project's Tailwind/PostCSS/CSS build configured separately, and make sure it scans `.gox`/`.go` sources or safelists classes assembled in Go.
 
+## Stylesheet Resources
+
 Stylesheet resources are **public and cacheable by default** (hash-based URL, minified). No `cache` attribute needed — unlike generic resources which are private by default. `private` serves through an instance-scoped hook URL while still using the stylesheet pipeline (cached, reused). `nocache` serves through an instance-scoped hook URL without shared resource caching (new resource per call). Use `nocache` for dynamically generated styles; use `private` when the content is static but should not be publicly reachable.
 
 ### Plain inline `<style>` (auto-managed)
@@ -94,6 +96,10 @@ For full resource behavior (caching, content type, name, private/nocache), see [
 | `nocache` | No shared resource caching (for dynamically generated styles) |
 
 `name`, `private`, and `nocache` also work on managed `<style>...</style>` tags; `raw` keeps the literal style tag instead of turning it into a stylesheet resource.
+
+## Framework CSS
+
+Doors ships no stylesheet of its own — no `doors.css` resource, no head `<link>` for it. The internal `d0-r { display: contents }` rule is applied via a constructed stylesheet in the blocking head script, holds at first paint, and needs no Doors origin in a strict `style-src` CSP.
 
 ## Related
 

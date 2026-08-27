@@ -8,6 +8,7 @@ DOM events connected to Go handlers through special attributes.
 - [Request Types](#request-types)
 - [Common Fields (all event attrs)](#common-fields-all-event-attrs)
 - [Handler Return](#handler-return)
+- [Errors](#errors)
 - [Flow](#flow)
 - [Attach Styles](#attach-styles)
 - [Reuse (activated attrs)](#reuse-activated-attrs)
@@ -36,16 +37,18 @@ DOM events connected to Go handlers through special attributes.
 | `ABlur` | Blur | `RequestFocus` |
 | `AFocusIn` | Focus (bubbles) | `RequestFocus` |
 | `AFocusOut` | Blur (bubbles) | `RequestFocus` |
-| `AInput` | Input | `RequestEvent[InputEvent]` |
-| `AChange` | Change | `RequestEvent[ChangeEvent]` |
+| `AInput` | Input | `RequestInput` |
+| `AChange` | Change | `RequestChange` |
 | `ASubmit[T]` | Form submit (decoded) | `RequestForm[T]` |
 | `ARawSubmit` | Form submit (raw) | `RequestRawForm` |
+
+Server code can dispatch synthetic events (pointer, keyboard, focus, input, change, submit) to attached elements via `doors.Emitter`; emitted events bubble, so event attrs on ancestors run too. See [shared-attr.md](./17-element-handles.md).
 
 ## Request Types
 
 ```go
 type RequestEvent[E any] interface {
-    RequestCommon   // SetCookie, GetCookie, Context()
+    RequestCommon
     RequestAfter    // After(a Actions) error
     Event() E
 }
@@ -53,6 +56,8 @@ type RequestEvent[E any] interface {
 type RequestCommon interface {
     SetCookie(cookie *http.Cookie)
     GetCookie(name string) (*http.Cookie, error)
+    RequestHeader() http.Header
+    RemoteAddr() string         // direct peer host:port; proxy headers not applied
     Context() context.Context   // HTTP request context, NOT Doors ctx
 }
 ```
@@ -63,32 +68,48 @@ type RequestCommon interface {
 ### PointerEvent
 
 ```go
-type PointerEvent = front.PointerEvent  // Type, PointerID, Width, Height, Pressure, TangentialPressure, TiltX, TiltY, Twist, Buttons, Button, PointerType, IsPrimary, ClientX, ClientY, ScreenX, ScreenY, PageX, PageY, Timestamp
+type PointerEvent struct { ... }  // Type, PointerID, Pressure, TangentialPressure, TiltX, TiltY, Twist, Buttons, Button, PointerType, IsPrimary, Timestamp + geometry Rects: Pointer, Target, Page, Screen
+type Rect struct { ... }          // X, Y, Width, Height (CSS px)
 type RequestPointer = RequestEvent[PointerEvent]
 ```
+
+Coordinates come from methods deriving from the rects: `OffsetX()/OffsetY()` (in target), `ClientX()/ClientY()` (viewport), `PageX()/PageY()` (document), `ScreenX()/ScreenY()` (screen).
 
 ### KeyboardEvent
 
 ```go
-type KeyboardEvent = front.KeyboardEvent  // Type, Key, Code, Repeat, CtrlKey, ShiftKey, AltKey, MetaKey, Timestamp
+type KeyboardEvent struct { ... }  // Type, Key, Code, Repeat, CtrlKey, ShiftKey, AltKey, MetaKey, Timestamp
 type RequestKeyboard = RequestEvent[KeyboardEvent]
 ```
+
+`AKeyDown`/`AKeyUp` filter with `Keys []Key` — fires when the event matches any entry:
+
+```go
+type Key struct {
+    Key string  // event.key; "" matches any key
+    CtrlMod, ShiftMod, AltMod, MetaMod Mod  // ModAny (default) | ModOn | ModOff
+}
+```
+
+`{Key: "s", CtrlMod: doors.ModOn}` matches Ctrl+S with any other modifiers; set the rest to `ModOff` for an exact combination. `PreventDefault`/`StopPropagation` apply only to matching events.
 
 ### FocusEvent
 
 ```go
-type FocusEvent = front.FocusEvent  // Type, Timestamp
+type FocusEvent struct { ... }  // Type, Timestamp
 type RequestFocus = RequestEvent[FocusEvent]
 ```
 
 ### Input / Change
 
 ```go
-type InputEvent = front.InputEvent    // Type, Name, Data, Value, Number, Date, Selected, Checked, Timestamp
-type ChangeEvent = front.ChangeEvent  // Type, Name, Value, Number, Date, Selected, Checked, Timestamp
+type InputEvent struct { ... }   // Type, Name, Data, Value, Number, Date, Selected, Checked, Timestamp
+type ChangeEvent struct { ... }  // Type, Name, Value, Number, Date, Selected, Checked, Timestamp
+type RequestInput = RequestEvent[InputEvent]
+type RequestChange = RequestEvent[ChangeEvent]
 ```
 
-`AInput{ExcludeValue: true}` omits the current value fields from the payload. Use it when the input event data or the fact that editing happened is enough.
+`AInput{ExcludeValue: true}` fills only Type, Data, and Timestamp. Use it when the input event data or the fact that editing happened is enough.
 
 ### Forms
 
@@ -123,25 +144,35 @@ For uploads or custom multipart parsing, use `ARawSubmit`, set an intentional pa
 ## Common Fields (all event attrs)
 
 ```go
-On       // handler (required)
-Scope    // request scheduling (Scopes)
+On        // server handler (optional)
+Scope     // request scheduling (Scopes)
 Indicator // temporary client-side feedback (Indicators)
-Before   // client actions before request (Actions)
-OnError  // client actions on failure (Actions)
+Before    // client actions before request (Actions)
+OnError   // client actions on failure (Actions)
 ```
+
+Nil `On`: the request is still sent and accepted (body discarded unread) and the hook stays registered — an attr can be attached purely for its client-side effects or as an `Emitter` round-trip target. Omit the attr entirely when nothing is needed.
 
 Some also have:
 - `PreventDefault bool` (pointer/key events)
 - `StopPropagation bool` (pointer/key events and focus-in/focus-out)
 - `ExactTarget bool` (pointer/key events and focus-in/focus-out)
-- `Filter []string` (key events — match by `event.key`)
+- `Keys []Key` (key events — key + modifier matching, see [KeyboardEvent](#keyboardevent))
 - `ExcludeValue bool` (input — omit value from payload)
+- `RequestTimeout time.Duration` (`ASubmit`/`ARawSubmit`, also `AHook`/`ARawHook` — overrides `Conf.RequestTimeout` per hook; regular event attrs do not have it)
 
 
 ## Handler Return
 
 - `false` — keep handler active (normal)
 - `true` — handler done, remove it (one-shot)
+
+A handler that hands work to a goroutine can keep the request pending past its return: `release := doors.HoldSettle(ctx)` keeps the indicator, the scope, and the `$hook` promise pending until `release()`. See [door.md](./07-door.md).
+
+## Errors
+
+- Attaching an event/form/hook attr on a released door fails the render with `context.Canceled`.
+- Completion channels consumed inside handlers (`Call`, door operations) deliver sentinels for `errors.Is`: `ErrExecution` (action reached the browser and failed there), `ErrTerminated` (instance ended first).
 
 ## Flow
 
@@ -247,3 +278,5 @@ Wire custom events in JS with `$hook(...)` or `$fetch(...)` + `AHook[T]`/`ARawHo
 - [actions.md](./13-actions.md) — `Before`, `OnError`, `r.After(...)`
 - [navigation.md](./10-navigation.md) — `ALink`
 - [javascript.md](./15-javascript.md) — `AHook`, `$hook`
+- [shared-attr.md](./17-element-handles.md) — `Emitter` (synthetic events), `Setter`
+- [door.md](./07-door.md) — `HoldSettle`, lifecycle hooks
