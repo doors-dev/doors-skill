@@ -118,6 +118,7 @@ var field doors.Emitter
 - Richer DOM work → `ActionEmit` + `$on(...)`
 - UI state change → normal rendering/state
 - `Into` units: `Setter` = live elements, `Emitter` = hook requests
+- Same from JS → `$sys.emit(target, event)` (see `15-javascript.md`)
 
 ## Removed: AShared
 

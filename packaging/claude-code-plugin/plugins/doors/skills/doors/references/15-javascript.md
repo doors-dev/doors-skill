@@ -42,6 +42,7 @@ Auto-wrapped with:
 - `$sys.ready()` — promise that resolves when the page is loaded and runtime initialized. All framework APIs (`$data`, `$hook`, `$fetch`, `$on`) already wait for readiness internally, so this is only needed for non-framework operations that depend on the runtime.
 - `$sys.clean(fn)` — register cleanup on unmount (timers, listeners)
 - `$sys.activateLinks()` — re-scan `ALink` elements to apply active-link indication. Useful after JavaScript-driven URL fragment changes.
+- `$sys.emit(target, event)` — dispatch a DOM event from JS and await every hook request it triggers (including `HoldSettle` and `After` actions); resolves to the number of hook requests, rejects with `HookErr` on any failure (scope-canceled or `Keys`-filtered hooks count as failures). Client counterpart of `doors.Emitter`. Build the event yourself (`new PointerEvent("click", {bubbles: true})`); safe at script top level.
 - top-level `await`
 
 Auto-detected request body: `undefined`→no body, `FormData`→multipart, `URLSearchParams`→form-urlencoded, `Blob`→raw blob body, `File`→raw file body, `ReadableStream`→`application/octet-stream`, `ArrayBuffer`/typed arrays→`application/octet-stream`, anything else→JSON.
