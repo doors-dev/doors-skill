@@ -255,6 +255,7 @@ Do not reach for Rod for pure logic, formatting, validation, path encoding, quer
 - Use stable selectors such as `id` or `data-testid`; do not depend on incidental layout text for controls.
 - Do not assert generated Doors attribute names, hook IDs, or resource hashes unless testing those internals directly.
 - Close pages created by helpers when tests open many pages or run large suites, for example with `t.Cleanup(page.MustClose)`, unless intentionally keeping the page open for the test duration.
+- Render errors leave no marker in the page (a failed Door is left out or keeps stale, detached content): when a Door does not update, check the app log for `door rendering error`, or read the operation's completion channel.
 - Keep request timeouts realistic. Very low app request timeouts can create confusing client-system failures instead of testing the behavior you care about.
 - In Linux CI, use `launcher.NoSandbox(true)` when Chromium sandboxing is unavailable.
 - For manual Safari testing over plain `http://localhost`, configure `ServerSessionCookieNoSecure: true`; Chromium accepts secure cookies on localhost, Safari does not.

@@ -15,6 +15,8 @@ The page factory runs once per page instance (each full page load creates one). 
 
 Day-to-day routing happens *inside* the returned component, not here.
 
+A HEAD request for a page runs the factory and renders the page in full to learn its final status, then answers with the same headers as GET and no body. That instance ends at once and is not tracked by the session, so it cannot suspend live tabs. `Conf.ServerDisableHead` makes page HEAD answer 405 instead; static files and resources always answer HEAD.
+
 ```go
 app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Comp {
     auth := doors.SessionStore(ctx).Init(authKey{}, func() any {
@@ -34,12 +36,12 @@ type App interface {
     Use(middleware ...Use)
     InstanceCount() int
     SessionCount() int
-    Drain(callback func()) // one-way drain mode; callback once when last instance is gone
+    Drain(migrate bool, callback func()) // one-way drain mode; callback at most once, own goroutine, when last instance is gone
     http.Handler
 }
 ```
 
-`Drain` stops refreshing the app id cookie and makes in-app navigation end the instance (browser reloads). Use for graceful shutdown/handover.
+`migrate=true`: in-app link navigation and history restore end the instance, the browser reloads onto the new process, and the app id cookie stops refreshing. `migrate=false`: instances end naturally, no forced reload, cookie keeps refreshing. Use for graceful shutdown/handover.
 
 ## Middleware
 
@@ -52,6 +54,8 @@ app.Use(doors.UseDir("/assets/",  "./assets",  doors.CacheControlImmutable))
 app.Use(doors.UseFS("/static/",   embedFS,     doors.CacheControlStatic))
 app.Use(doors.UseFile("/robots.txt", "./static/robots.txt", doors.CacheControlStatic))
 ```
+
+`UseDir`/`UseFS`/`UseFile`/`UseResource` serve GET and HEAD (HEAD with an exact `Content-Length`); other methods and non-matching paths fall through to the next handler.
 
 ### Embedded Static Assets
 
@@ -111,7 +115,7 @@ func WithPrinter(p func(next gox.Printer) gox.Printer) With // Wrap the gox.Prin
 
 `ESProfile{...}` also implements `With`.
 
-`WithPrinter` wrapper — invoked once per drain (page render or door render cycle incl. descendants); may be invoked concurrently across drains, but each returned printer (must be non-nil) gets sequential `Send` calls on one goroutine. Jobs are pooled: forward each exactly once, never retain a job or its `Attrs` after `Send` returns (`Attrs.Clone` for a copy); `job.Context()` carries the render scope. `gox.JobOpen.Attrs` mutable until serialized (may be nil on no-output container heads). Do not touch `d0*`-managed output or inject head-relevant elements before the document head; do not block. Not wrapped: error pages, failed-cycle replacement HTML, static files/resources. Nil disables wrapping.
+`WithPrinter` wrapper — invoked once per drain (page render or door render cycle incl. descendants); may be invoked concurrently across drains, but each returned printer (must be non-nil) gets sequential `Send` calls on one goroutine. Jobs are pooled: forward each exactly once, never retain a job or its `Attrs` after `Send` returns (`Attrs.Clone` for a copy); `job.Context()` carries the render scope. `gox.JobOpen.Attrs` mutable until serialized (may be nil on no-output container heads). Do not touch `d0*`-managed output or inject head-relevant elements before the document head; do not block. Not wrapped: error pages, static files/resources. Nil disables wrapping.
 
 ## Cache-Control Constants
 

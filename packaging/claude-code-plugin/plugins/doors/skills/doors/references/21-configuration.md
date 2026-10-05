@@ -32,6 +32,7 @@ type Conf struct {
 
     ServerCacheControl            string // managed resource cache header (default: immutable 1y)
     ServerDisableGzip             bool   // no gzip for HTML, door updates, managed resources
+    ServerDisableHead             bool   // page HEAD answers 405; default renders the page for status + headers, no body (static files/resources always answer HEAD)
     ServerSessionCookiePrefix     string // prepended to session cookie name (e.g. __Host-)
     ServerSessionCookieNoSecure   bool   // omit Secure (dev only)
     ServerRequestBodyLimit        int    // max hook/form request body bytes (default 8 MB); per-request override via r.SetRequestBodyLimit
@@ -151,13 +152,13 @@ doors.WithErrorPage(func(r *http.Request, err error) gox.Elem {
 
 Contract:
 
-- Called once per **drain**: an initial page render (whole document, static pages included), or a Door render cycle (updated Door + descendant Doors, one payload).
+- Called once per **drain**: an initial page render (whole document), or a Door render cycle (updated Door + descendant Doors, one payload).
 - Returned printer must be non-nil; it gets that drain's jobs as sequential `Send` calls on one goroutine, in document order, never reused across drains. The middleware func itself may run concurrently — keep per-drain state in the returned printer, not shared vars.
 - Jobs are pooled/single-use: forward each to `next` exactly once; never retain a job or its `Attrs` after `Send` returns (`Attrs.Clone` for an independent copy).
 - `job.Context()` carries the producing render scope (works with `doors.SessionContext` etc.).
 - `gox.JobOpen` attrs are mutable until serialized; may be nil on no-output container heads.
 - Do not modify `d0*` elements/attributes or rewritten resource URLs; do not inject head-relevant elements before the document head; do not block (render hot path).
-- Not wrapped: `WithErrorPage` output, failed-cycle replacement HTML, static files/resources.
+- Not wrapped: `WithErrorPage` output, static files/resources.
 
 ## Session Tracker
 

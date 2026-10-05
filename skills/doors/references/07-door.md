@@ -46,7 +46,6 @@ func (d *Door) Outer(ctx context.Context, outer any) <-chan error    // replace 
 func (d *Door) Static(ctx context.Context, content any) <-chan error // replace with static content (no longer live)
 func (d *Door) Reload(ctx context.Context) <-chan error              // re-render current content
 func (d *Door) Unmount(ctx context.Context) <-chan error             // remove from DOM, keep content
-func (d *Door) Freeze(ctx context.Context) <-chan error              // keep markup on page, release server side
 ```
 
 `Outer` accepts any renderable — element, comp, string, slice — not only `gox.Elem`; a typed-nil `gox.Elem` behaves like `nil` (no panic).
@@ -59,23 +58,46 @@ Passing `nil` as content works for all content-taking methods:
 | `Outer(ctx, nil)` | Mounted placeholder (`d0-r`), no layout effect |
 | `Static(ctx, nil)` | Remove without replacement |
 
-### Freeze
+### Static
 
-`Freeze(ctx)` keeps the Door's current markup on the page but releases everything behind it on the server: hooks, subscriptions, nested Doors; `doors.Go` contexts inside are canceled. Interactive elements stay visible but silently stop working. Unlike `Static`, no content is sent. The Door keeps its stored state and can be mounted again. Made for content that is dynamic only for a while and then final — feed blocks, log/chat entries, streamed output: freeze the finished block, drop the reference, server memory stays flat as the page grows.
+`Static(ctx, content)` replaces the Door with content that is no longer live; the Door is unmounted and can be garbage collected. Static content may mount new Doors of its own — the building block for appending (see Appending Content).
+
+Static content belongs to the Door's parent: hooks, subscriptions, `doors.Go`, and lifecycle callbacks (`OnReady` included) registered while rendering it attach to the parent and live until the parent's content is cleared, even if the static render fails. Calls it makes during render (`doors.Call`) go through the parent too and are sent even if the static render fails. Nothing else stays on the parent, so a chain of `Static` appends keeps server memory flat (see Appending Content).
+
+`Static` issued from a beam subscription renders current state: the content sees a consistent snapshot, which can be newer than the value that triggered the subscription. Pass the value in when the content must match it.
+
+### Once
+
+A Door stores its content until replaced, so a large value passed to `Inner`/`Outer` stays in memory while the Door holds it. `doors.Once(v)` renders `v` on the first render only and drops its reference:
+
+```go
+door.Outer(ctx, doors.Once(&UserList{users: users}))
+```
+
+Trade-off: a Door rendered again (`Reload`, ancestor re-render, remount) comes back empty. Use for content rendered and then left alone, or replaced on every update. Hooks keep what their handlers capture — a component whose methods serve as handlers stays in memory until its hooks are removed.
 
 ### Completion channels
 
 Each mutating method returns `<-chan error` (signatures above); the return value is optional to use:
 
 - success: two `nil` then close — first `nil` = scheduled (render completed), second = applied to the page
-- failure: one error then close; `context.Canceled` = superseded by a newer Door operation, unmount, or lifecycle change
+- failure: one error then close; a failed render sends its error (see Render errors); `context.Canceled` = superseded by a newer Door operation, unmount, or lifecycle change
 - closed with no value = Door not mounted when observed; stored state was still updated (affects future renders)
 
 **Do not wait on the channel during rendering.** Wait in a hook, in `doors.Go`, or in a goroutine with `doors.DetachedContext(ctx)` / `doors.InstanceContext(ctx)` (for work that outlives the fragment).
 
 ### doors.Go ordering
 
-`doors.Go(f)` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery — Door updates made inside always land after their host markup. Best-effort like `OnReady`: `f` never runs if the cycle fails or is superseded. Its ctx is `DetachedContext`-equivalent, canceled when the surrounding content is released (replaced, unmounted, or frozen); waiting on completion channels inside `f` is safe.
+`doors.Go(f)` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery — Door updates made inside always land after their host markup. Best-effort like `OnReady`: `f` never runs if the cycle fails or is superseded (inside `Static` content it belongs to the parent, so a failed static render does not drop it). Its ctx is `DetachedContext`-equivalent, canceled when the surrounding content is released (replaced or unmounted); waiting on completion channels inside `f` is safe.
+
+### Render errors
+
+A marginal case: render functions return errors only if you return one yourself, and that is rarely right — render loading failures and missing data as content. When a Door's render fails, nothing is sent to the browser and the error is logged as `door rendering error` with the call site (a render failing because it was superseded is not logged).
+
+- **Door operation** (`Inner`, `Outer`, `Static`, `Reload`): the error goes to its completion channel. The page keeps the previous content, but it no longer responds — its hooks and subscriptions were released when the operation started. The next successful operation replaces it. After a failed `Outer`, `Inner` fails until a new `Outer` succeeds or the parent renders the Door again; recover with a new `Outer`, not `Reload` (once an `Inner` was issued, `Reload` fails too). A failed `Static` still makes the Door static: later operations only update its stored state.
+- **Door rendered by its parent** (initial page or parent update): left out of the parent's output. Operations on it fail with a placement error until the parent renders it again.
+
+No error marker reaches the page (the old `Component Error` element is gone): to observe failures, read the operation's channel or the log. `AData` values are encoded and templ components rendered during the render pass, so an `AData` value that fails to encode or a templ error is a render error too.
 
 ## Lifecycle
 
@@ -89,11 +111,10 @@ A Door has two sides: stored state (on the Go value) and mounted state (on the p
    - `Static` before mount → stores static content (no longer a live Door)
    - `Static(ctx, nil)` before mount → stores absent state
    - `Unmount` before mount → keeps content for a later mount
-   - `Freeze` before mount → stored state unchanged
 3. When rendered, mounts saved state (unless proxied with seed content — `~>(door) <div>seed</div>` overwrites stored state)
 4. While mounted, changes sync to DOM
 
-After `Static`, `Freeze`, or `Unmount`, methods still update stored state — they don't auto-remount, but affect future renders if the Door is rendered again.
+After `Static` or `Unmount`, methods still update stored state — they don't auto-remount, but affect future renders if the Door is rendered again.
 
 ### Lifecycle Hooks
 
@@ -104,9 +125,9 @@ func OnClean(ctx context.Context, f func())                      // current cont
 func HoldSettle(ctx context.Context) (release func())            // keep the dispatch batch open past handler return
 ```
 
-- `OnReady` — **best-effort, at most once**: never fires if the render fails or is superseded by a newer Door operation. Fires promptly if the content is already on the page (e.g. in an event handler).
+- `OnReady` — **best-effort, at most once**: never fires if the render fails or is superseded by a newer Door operation. A failed `Static` render is the exception: its content belongs to the parent. Fires promptly if the content is already on the page (e.g. in an event handler).
 - `OnSettle` — **exactly once**: runs `ops` within the current dispatch batch (in a handler the batch spans the whole handler) and fires `on` once everything the batch started — door updates, beam propagation — is processed and enqueued. Fires even on cancel, render failure, or instance shutdown (the provided ctx reports it). Settling is server-side: updates queued, not browser-acknowledged. Practical uses: a reliable point to collect information gathered during render; controlled batched UI updates — the next batch issued from `on` is guaranteed to land after the previous one.
-- `OnClean` — **exactly once** on every teardown path: Door update (`Inner`/`Outer`/`Reload`), removal (`Static`/`Unmount`), freeze (`Freeze`), ancestor re-render, render failure, instance end. No ctx (the registering ctx is already canceled); capture `InstanceContext(ctx)` beforehand if teardown needs Doors calls. On replacement, old content's `OnClean` runs before new content's `OnReady`.
+- `OnClean` — **exactly once** on every teardown path: Door update (`Inner`/`Outer`/`Reload`), removal (`Static`/`Unmount`), ancestor re-render, render failure (not for `Static` content, which belongs to the parent), instance end. No ctx (the registering ctx is already canceled); capture `InstanceContext(ctx)` beforehand if teardown needs Doors calls. The only ordering guarantee is per piece of content: its `OnClean` runs after its `OnReady` has run or been dropped. The replaced content's `OnClean` is not ordered with the replacing content's render or `OnReady`.
 - `HoldSettle` — keeps the current dispatch batch open after the handler returns until `release()` is called: `OnSettle` callbacks, indicators, scopes, and the client `$hook` promise stay pending. Use it to hand work to another goroutine. Call it synchronously in the handler; always call `release` (idempotent, typically deferred in that goroutine — otherwise the batch settles only at instance end). Operations started with the handler ctx join the batch; `DetachedContext` ones don't. Outside a batch, `release` is a no-op.
 - Callbacks run inline on the framework goroutine firing the frame (or the calling goroutine when it already fired); `OnReady`/`OnSettle` receive a `DetachedContext`-equivalent ctx. Never block in them.
 - Acquire in render code, release in `OnClean`; never tie cleanup to `OnReady`. All panic if ctx is not a Doors ctx.
@@ -127,7 +148,8 @@ doors.OnClean(ctx, func() { sub.Close() })
 | `Static` | Region becomes plain rendered content |
 | `Reload` | Redraw current content (depends on external state) |
 | `Unmount` | Remove now, keep for reuse later |
-| `Freeze` | Content went final: keep markup visible, free server resources, remountable |
+| `doors.Once(v)` | Don't keep rendered content in Door memory |
+| `Static` chain | Page accumulates items (feeds, logs, chats, streams); server keeps only the growth edge |
 
 ## Advanced Patterns
 
@@ -152,53 +174,64 @@ This works because the Door is rendered before the deferred `Static` replaces it
 
 ### Appending Content
 
-Chain Doors to grow content incrementally. Each append creates a new Door, stores content + next Door into the previous one via `Static`:
+`Static` content may mount new Doors, which turns `Static` into an append primitive (the docs' Growing Content recipe):
+
+- **Edge handoff** — keep one Door as the growth edge; to append, replace the edge with the item plus a fresh edge. The page grows without bound while the server keeps one live Door per chain, so server memory stays flat.
+- **Pre-mount buffering** — Door methods on an unmounted Door write stored state, so appends may arrive before the feed renders: the chain builds up behind its head Door and the first render reproduces it whole.
+- **Render-once** — appended items go to the page and are forgotten. Consuming the seed drops the last reference to the chain, so a later render starts a fresh one; when the feed must survive an ancestor re-render, render past items from your data source.
 
 ```gox
-type Append struct {
-    door *doors.Door
+type Feed struct {
+    mu   sync.Mutex
+    seed *doors.Door
+    tail *doors.Door
 }
 
-elem (a Append) Main() {
-    Content
-    ~(a.door)
-    <button
-        (doors.AClick{
-            Scope: new(doors.ScopeBlocking),
-            On: func(ctx context.Context, rp doors.RequestPointer) bool {
-                a.add(ctx, "new content")
-                return false
-            },
-        })>
-        Append
-    </button>
-}
-
-func (a *Append) add(ctx context.Context, content any) {
-    prev := a.door
+func (f *Feed) Append(ctx context.Context, item gox.Elem) {
+    f.mu.Lock()
+    defer f.mu.Unlock()
+    // append before the first render: seed a head door that holds the chain until it mounts
+    if f.tail == nil {
+        f.seed = new(doors.Door)
+        f.tail = f.seed
+    }
+    // replace the edge with the item plus a fresh edge
     next := new(doors.Door)
-    a.door = next
-    prev.Static(ctx, <>
-        ~(content)
+    f.tail.Static(ctx, <>
+        ~(item)
         ~(next)
     </>)
+    f.tail = next
+}
+
+elem (f *Feed) Main() {
+    ~~
+    f.mu.Lock()
+    defer f.mu.Unlock()
+    // consume the seed: the chain renders once, then the server forgets it
+    head := f.seed
+    f.seed = nil
+    if head == nil {
+        head = new(doors.Door)
+        f.tail = head
+    }
+    ~~
+    <section class="feed">~(head)</section>
 }
 ```
 
-Each call to `add` chains: the old Door becomes static (final content + new Door slot), and the struct field advances to the new Door. Previous content is preserved, new content appends at the end.
-
-No synchronization is needed for `a.door` because calls to the same hook are serialized. But `a.door` is a plain struct field — when mutating plain struct state from multiple hooks or goroutines, you must handle concurrency yourself. `Source`/`Beam` mutations and Door operations are goroutine-safe.
+One mutex guards `seed` and `tail` across both paths: Door methods are goroutine-safe, but the fields tracking the chain are plain struct state and yours to synchronize. Holding the lock across the render body is fine — a Door's content render is scheduled on the runtime, not performed inline.
 
 Notes for growing content:
 
-- Appends work before first render too: Door methods on an unmounted Door write stored state, so the chain builds up behind its head and the first render reproduces it whole. The chain is render-once — the server forgets appended items.
-- For items that stay dynamic for a while (streamed output, edit-in-place), mount the dynamic part through its own Door and `Freeze` it when final.
+- The edge's position sets the direction: edge after the item grows down (append), edge before it grows up (prepend).
+- For items that stay dynamic for a while (streamed output, edit-in-place), mount the dynamic part through its own Door and call `Static` on that Door with the final content when done. Keep the final content free of hooks and subscriptions: static content registers them on the parent, where they live as long as the feed does.
 - To pace a fast producer, read the completion channel `Static` returns before the next append.
-- Inside tag-restricted parents (`<table>`, `<select>`) the generated `d0-r` container is foster-parented out by the browser — give each new door a real tag first: `next.Outer(ctx, <tr></tr>)`.
+- Inside tag-restricted parents (`<table>`, `<select>`) the generated `d0-r` container is foster-parented out by the browser — give each new edge a real tag first: `next.Outer(ctx, <tr></tr>)`.
 
 ### Collections of Doors
 
-When state-driven rendering (`Bind`, `Effect`, `Route`) is not enough — for example, appending content incrementally, managing independent regions that freeze/revive, or building abstractions that need explicit control over the DOM lifecycle — store Doors in whatever structure fits (slice, map, custom index) and manage what each displays directly. Each Door can be updated, ended with `Static`, released with `Freeze`, or `Unmount`ed independently.
+When state-driven rendering (`Bind`, `Effect`, `Route`) is not enough — for example, appending content incrementally, managing independent regions that come and go, or building abstractions that need explicit control over the DOM lifecycle — store Doors in whatever structure fits (slice, map, custom index) and manage what each displays directly. Each Door can be updated, ended with `Static`, or `Unmount`ed independently.
 
 Pair with explicit state subscriptions (`Sub`, `ReadAndSub`) for maximum control: both give you explicit, imperative control — no implicit reactivity, just direct manipulation of what's on the page.
 

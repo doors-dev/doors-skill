@@ -9,6 +9,7 @@ Reactive values in Doors: `Source[T]` (writable) and `Beam[T]` (read-only).
 - [Creating Sources](#creating-sources)
 - [Derived Sources (writable views)](#derived-sources-writable-views)
 - [Derived Beams (read-only views)](#derived-beams-read-only-views)
+- [Tab State](#tab-state)
 - [Rendering Strategies](#rendering-strategies)
 - [Reading](#reading)
 - [Updating](#updating)
@@ -158,6 +159,34 @@ func (p Path) days() int {
 
 **State holds identifiers, not bulk data.** Keep IDs, filters, settings, selections in Doors state. Query backing data during render and forget it. Storing small config-like records (e.g., user access settings) is fine; storing table data (product lists, search results) rarely makes sense. Storing gox elements/components is possible but be cautious — prefer generating markup from state during render.
 
+## Tab State
+
+```go
+func TabState[T comparable](ctx context.Context, key string) Source[*T]
+func TabStateEqual[T any](ctx context.Context, key string, equal func(new, old T) bool) Source[*T] // nil equal → every update propagates
+```
+
+Per-tab state that survives reload but stays out of the URL (open panel, draft filter, wizard step). Kept by the browser tab: survives reloads and in-app navigation, back/forward keep the latest value, not shared with other tabs, never in the URL. Stored as JSON — keep values small, the whole tab state travels on every page load and update.
+
+Stored state reaches the server only after the page has been rendered: initial render always sees `nil`. Render a placeholder, let the update fill it in:
+
+```gox
+elem (w Wizard) Main() {
+    ~~
+    step := doors.TabState[int](ctx, "step")
+    ~~
+    ~(step.Bind(elem(v *int) {
+        ~(if v == nil { <div class="skeleton"></div> } else { ~(Steps{Current: *v}) })
+    }))
+}
+```
+
+- After the sync the value is never `nil`; missing key reads as zero value.
+- `Update(ctx, nil)` removes the key.
+- A value set before the sync wins over the stored one.
+- Not for trust-bearing values (client-controlled); not a replacement for `InstanceStore` (dies with the instance) or the URL (shareable).
+- `ctx` must be a Doors render or handler context.
+
 ## Rendering Strategies
 
 Two approaches to connecting reactive state to UI. Both are built on `Door` internally.
@@ -295,6 +324,7 @@ During one render/update cycle, a Door subtree sees one coherent view of a `Sour
 - Treat source values as immutable — replace with a new value, never mutate in place.
 - `Read(ctx)` for render-consistent values, `Get()` only outside render guarantees.
 - `NoSkip` only when every in-flight committed update must finish. Doesn't bypass equality.
+- Per-tab state that must survive reload without going into the URL → `TabState`.
 
 ## Related
 

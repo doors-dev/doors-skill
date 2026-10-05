@@ -26,7 +26,7 @@ After    // optional: actions after successful navigation (ALink-specific field)
 // + all shared event lifecycle fields: Scope, Indicator, Before, OnError
 ```
 
-All links share one built-in latest scope, so a new click cancels a pending navigation. `OnError` has no default — a failed navigation reverts the optimistic URL change (v0.14 defaulted nil `OnError` to `ActionLocationReload{}`; it no longer does).
+All links share one built-in latest scope, so a new click cancels a pending navigation; on the backend the link hook is `RaceStrict`, so a click that arrives out of order is canceled instead of run. `OnError` has no default — a failed navigation reverts the optimistic URL change (v0.14 defaulted nil `OnError` to `ActionLocationReload{}`; it no longer does).
 
 ### Behavior
 
@@ -39,7 +39,7 @@ All links share one built-in latest scope, so a new click cancels a pending navi
 
 ### Failure Semantics
 
-- Canceled (by scope) or 404 (hook removed): URL reverts silently, `OnError` does not run
+- Canceled (by scope or arrived out of order) or 404 (hook removed): URL reverts silently, `OnError` does not run
 - Gone 410 (instance stopped): page reloads at the new URL, `OnError` does not run
 - Network error or 5xx: URL reverts, `OnError` runs
 - 400 or other unexpected errors: URL stays at the new path, `OnError` runs

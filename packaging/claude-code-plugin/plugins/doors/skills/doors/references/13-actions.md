@@ -32,6 +32,8 @@ Handler lookup starts at the Door the action is dispatched from and walks out to
 
 When `ActionEmit` runs from `OnError`, the `$on(...)` handler receives the hook error as its second argument: `(arg, err)`.
 
+An emit issued by the same render that inserts a managed script can arrive before that script registers its `$on` handler and fail with `handler … not found`. When it matters, have the script call a `$hook` after registering, and emit from that hook's handler (see `15-javascript.md`).
+
 ### ActionScroll — scroll into view
 
 ```go
@@ -53,6 +55,15 @@ type ActionIndicate struct {
 ```
 
 Not tied to request lifecycle. Lasts for `Duration`. Only Query/QueryAll indicator variants apply here — an event element exists only in event attr and `ALink` action lists, not in a direct `Call`.
+
+### ActionTime — read the client clock
+
+```go
+var now time.Time
+err := <-doors.Call(ctx, doors.ActionTime{}.Into(&now)) // in a handler or doors.Go, never during render
+```
+
+The reading keeps the browser's UTC offset, formatted like event timestamps.
 
 ### Location actions — hard navigation (full page load)
 

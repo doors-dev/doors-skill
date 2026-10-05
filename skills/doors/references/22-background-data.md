@@ -16,7 +16,7 @@ Start the goroutine where the data is consumed. Register it with `doors.OnReady`
 
 - Stays bound to the current dynamic owner (component or instance)
 - Is detached from rendering frames (no deadlock)
-- Is canceled when the owner's content is cleared (replaced, unmounted, or frozen)
+- Is canceled when the owner's content is cleared (replaced or unmounted)
 
 ```go
 type Profile struct {
@@ -69,7 +69,7 @@ elem (f profileView) showProfile(p Profile) {
 }))
 ```
 
-`doors.Go` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery, so Door updates made inside always land after their host markup. Best-effort: if the cycle fails or is superseded, `f` never runs. Its context is equivalent to `DetachedContext` — canceled when the surrounding content is cleared.
+`doors.Go` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery, so Door updates made inside always land after their host markup. Best-effort: if the cycle fails or is superseded, `f` never runs (inside `Door.Static` content it belongs to the parent, so a failed static render does not drop it). Its context is equivalent to `DetachedContext` — canceled when the surrounding content is cleared.
 
 From imperative render code, `doors.OnReady(ctx, on)` gives the same timing guarantee: start streaming goroutines inside `on` so they never outrun the markup they target.
 
@@ -166,7 +166,7 @@ Use `Watch` when you need to cancel the subscription explicitly — it returns a
 - `Beam.Effect` and `Beam.Bind` are render-only. `Read`, `Sub`, `ReadAndSub`, and `Watch` work from any context; subscriptions made outside an instance end when their context is canceled.
 - `Source.Update` and `Source.Mutate` work from any context and return an optional `<-chan error` completion channel. `Source.Get`/`Beam.Get` also work anywhere (latest value, no consistency guarantees).
 - Start goroutines that push into freshly rendered content via `doors.Go` or `doors.OnReady` — their updates then land after the host markup.
-- Door handle methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`, `Freeze`) work from detached and session contexts and return an optional `<-chan error`.
+- Door handle methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`) work from detached and session contexts and return an optional `<-chan error`.
 - For session-scoped state, always use `SessionStore.Init` in the app factory — it guarantees one goroutine per session regardless of how many pages are open.
 - Do not start session-scoped goroutines from component `Main()` — they would multiply per page instance.
 

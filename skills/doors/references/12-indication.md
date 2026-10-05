@@ -18,7 +18,7 @@ Each indicator type implements `Indicators` directly. Combine with `.And(...)` o
 | Helper | Effect |
 |--------|--------|
 | `IndicateContent(html)` | Replace content with `html` (innerHTML) |
-| `IndicateAttr(name, value)` | Set attribute `name=value` |
+| `IndicateAttr(name, value any)` | Set attribute; `nil`/`false` remove it, `true` bare, `gox.Output` serialized, else `fmt`. Previous value restored after |
 | `IndicateClass(class)` | Add CSS class(es) |
 | `IndicateClassRemove(class)` | Remove CSS class(es) |
 

@@ -34,7 +34,7 @@ Latest mounted render wins. When dynamic owner unmounts, Doors removes its title
 func Status(statusCode int) gox.Elem
 ```
 
-Sets HTTP status for **initial page response only**. Can render anywhere. Later reactive updates can't change the already-sent status code.
+Sets HTTP status for **initial page response only**. Can render anywhere. Later reactive updates can't change the already-sent status code. A page HEAD request renders the page in full, so it answers with the same final status and headers as GET (no body).
 
 ```gox
 elem NotFound() {

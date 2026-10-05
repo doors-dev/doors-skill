@@ -625,6 +625,8 @@ In Doors apps the framework renders pages — direct `Render` is for tests or of
 
 `~(expr)` dispatches via `Cursor.Any` (`Many` for multi-arg), tried in order: `string`/`[]string`, `gox.Elem`/`[]gox.Elem`, `gox.Comp`/`[]gox.Comp`, `gox.Job`/`[]gox.Job`, `func(cur gox.Cursor) error` (rendered as `Elem`), `gox.Templ` (`Render(ctx, w) error`), `[]any`. Anything else: escaped `fmt.Fprint`. Nil interface values render nothing.
 
+In Doors, a templ component renders during the render pass: its output is buffered when the component renders (one buffer per templ component), so a templ error is a render error like any other.
+
 ## Runtime extension interfaces
 
 Reach for these only when ordinary templating can't express the need. They live in `.go` files, not `.gox`.

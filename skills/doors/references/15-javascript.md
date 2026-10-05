@@ -42,7 +42,7 @@ Auto-wrapped with:
 - `$sys.ready()` — promise that resolves when the page is loaded and runtime initialized. All framework APIs (`$data`, `$hook`, `$fetch`, `$on`) already wait for readiness internally, so this is only needed for non-framework operations that depend on the runtime.
 - `$sys.clean(fn)` — register cleanup on unmount (timers, listeners)
 - `$sys.activateLinks()` — re-scan `ALink` elements to apply active-link indication. Useful after JavaScript-driven URL fragment changes.
-- `$sys.emit(target, event)` — dispatch a DOM event from JS and await every hook request it triggers (including `HoldSettle` and `After` actions); resolves to the number of hook requests, rejects with `HookErr` on any failure (scope-canceled or `Keys`-filtered hooks count as failures). Client counterpart of `doors.Emitter`. Build the event yourself (`new PointerEvent("click", {bubbles: true})`); safe at script top level.
+- `$sys.emit(target, event)` — dispatch a DOM event from JS and await every hook request it triggers (including `HoldSettle` and `After` actions); resolves to the number of hook requests, rejects with `HookErr` on any failure (hooks canceled by a scope or by `RaceStrict`, or `Keys`-filtered, count as failures). Client counterpart of `doors.Emitter`. Build the event yourself (`new PointerEvent("click", {bubbles: true})`); safe at script top level.
 - top-level `await`
 
 Auto-detected request body: `undefined`→no body, `FormData`→multipart, `URLSearchParams`→form-urlencoded, `Blob`→raw blob body, `File`→raw file body, `ReadableStream`→`application/octet-stream`, `ArrayBuffer`/typed arrays→`application/octet-stream`, anything else→JSON.
@@ -56,7 +56,7 @@ Auto-detected request body: `undefined`→no body, `FormData`→multipart, `URLS
 </script>
 ```
 
-`data:name=(expr)` is GoX shorthand for `doors.AData{Name: "name", Value: expr}`.
+`data:name=(expr)` is GoX shorthand for `doors.AData{Name: "name", Value: expr}`. Values are encoded at render time (string → text, `[]byte` → binary, else JSON); a value that fails to encode fails the render (see Render errors in `07-door.md`).
 
 `$data`, `$hook`, and `$fetch` read attrs from the managed script element they run on. Attach `AData`, `AHook`, or `ARawHook` to that same managed inline script, or to the `src` script marked `inline`; a separate module script does not inherit those helpers from another script element.
 
@@ -108,11 +108,12 @@ type AHook[T any] struct {
     Scope          Scopes
     Indicator      Indicators
     RequestTimeout time.Duration  // overrides Conf.RequestTimeout for this hook
+    Race           Race           // how overlapping calls are handled, see Race below
     On             func(ctx context.Context, r RequestHook[T]) (any, bool)
 }
 ```
 
-Return value marshaled to JSON. Return `false` to keep hook, `true` to remove. `On` optional — nil answers `null` (body discarded, hook stays).
+Return value marshaled to JSON. Return `false` to keep hook, `true` to remove. `On` optional — nil still decodes the body into `T` (empty or invalid body answers 400), then answers `null`; the hook stays.
 
 ### Raw
 
@@ -122,10 +123,19 @@ type ARawHook struct {
     Scope          Scopes
     Indicator      Indicators
     RequestTimeout time.Duration
+    Race           Race
     On             func(context.Context, RequestRawHook) bool
 }
 ```
 For raw body access, multipart, custom responses.
+
+### Race
+
+Both hook attrs take `Race`, same as event attrs (see `09-events.md`): `doors.RaceSerial` (default, one at a time in order of arrival), `doors.RaceParallel`, `doors.RaceStrict`.
+
+With `Race: doors.RaceParallel`, calls to the same hook run concurrently instead of one at a time. Handler must synchronize shared state itself. Returning `true` stops new calls; hook removed once running calls finish. For long-held streaming responses and independent parallel requests.
+
+With `Race: doors.RaceStrict`, a call that arrives after a newer one is not run; its `$hook`/`$fetch` rejects with a canceled `HookErr`.
 
 ### Client Side
 
@@ -152,6 +162,21 @@ Request body auto-detected: `undefined` (no body), `FormData` (multipart), `URLS
 ```
 
 Lookup starts at the Door the `ActionEmit` is dispatched from and walks out to the root — nearest registered handler wins; the action fails when none is reachable. A returned Promise resolves to the action result.
+
+Emit timing: a managed script loads from its own URL and runs once the browser has fetched it, unordered relative to Doors calls. An `ActionEmit` issued by the same render that inserts the script can arrive before `$on` registers and fails with `handler … not found`. When the emit must reach a freshly rendered script, call a `$hook` from the script after registering its handlers and issue the emit from that hook's handler:
+
+```gox
+<script (doors.AHook[bool]{
+    Name: "ready",
+    On: func(ctx context.Context, r doors.RequestHook[bool]) (any, bool) {
+        doors.Call(ctx, doors.ActionEmit[any]{Name: "show", Arg: "hello"})
+        return nil, true
+    },
+})>
+    $on("show", (msg) => console.log(msg))
+    await $hook("ready", true)
+</script>
+```
 
 ## Modules
 

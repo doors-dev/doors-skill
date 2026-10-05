@@ -12,6 +12,7 @@ DOM events connected to Go handlers through special attributes.
 - [Flow](#flow)
 - [Attach Styles](#attach-styles)
 - [Reuse (activated attrs)](#reuse-activated-attrs)
+- [Race](#race)
 - [Event Presets](#event-presets)
 - [Unsupported Events](#unsupported-events)
 - [Related](#related)
@@ -82,7 +83,11 @@ type KeyboardEvent struct { ... }  // Type, Key, Code, Repeat, CtrlKey, ShiftKey
 type RequestKeyboard = RequestEvent[KeyboardEvent]
 ```
 
-`AKeyDown`/`AKeyUp` filter with `Keys []Key` — fires when the event matches any entry:
+`AKeyDown`/`AKeyUp` filter with `Keys Keys` — fires when the event matches any key. A `Key` is a `Keys` value on its own; combine with `.And(...)` or `doors.JoinKeys(...)`:
+
+```go
+Keys: doors.Key{Key: "Enter"}.And(doors.Key{Key: "s", CtrlMod: doors.ModOn})
+```
 
 ```go
 type Key struct {
@@ -91,7 +96,7 @@ type Key struct {
 }
 ```
 
-`{Key: "s", CtrlMod: doors.ModOn}` matches Ctrl+S with any other modifiers; set the rest to `ModOff` for an exact combination. `PreventDefault`/`StopPropagation` apply only to matching events.
+`doors.Key{Key: "s", CtrlMod: doors.ModOn}` matches Ctrl+S with any other modifiers; set the rest to `ModOff` for an exact combination. `PreventDefault`/`StopPropagation` apply only to matching events.
 
 ### FocusEvent
 
@@ -149,6 +154,7 @@ Scope     // request scheduling (Scopes)
 Indicator // temporary client-side feedback (Indicators)
 Before    // client actions before request (Actions)
 OnError   // client actions on failure (Actions)
+Race      // how overlapping calls are handled on the backend (default RaceSerial), see Race below
 ```
 
 Nil `On`: the request is still sent and accepted (body discarded unread) and the hook stays registered — an attr can be attached purely for its client-side effects or as an `Emitter` round-trip target. Omit the attr entirely when nothing is needed.
@@ -157,7 +163,7 @@ Some also have:
 - `PreventDefault bool` (pointer/key events)
 - `StopPropagation bool` (pointer/key events and focus-in/focus-out)
 - `ExactTarget bool` (pointer/key events and focus-in/focus-out)
-- `Keys []Key` (key events — key + modifier matching, see [KeyboardEvent](#keyboardevent))
+- `Keys Keys` (key events — key + modifier matching, see [KeyboardEvent](#keyboardevent))
 - `ExcludeValue bool` (input — omit value from payload)
 - `RequestTimeout time.Duration` (`ASubmit`/`ARawSubmit`, also `AHook`/`ARawHook` — overrides `Conf.RequestTimeout` per hook; regular event attrs do not have it)
 
@@ -222,7 +228,28 @@ radio := doors.A(ctx, doors.AChange{
 <input type="radio" name="pick" value="b" (radio)/>
 ```
 
-Reusing one activated attr shares the same hook instance → serialized execution across elements.
+Reusing one activated attr shares the same hook instance → one execution queue across elements (unless `Race: doors.RaceParallel`).
+
+## Race
+
+`Race` (all event attrs, `AHook`, `ARawHook`) sets how the backend handles overlapping calls to one hook:
+
+| Value | Behavior |
+|-------|----------|
+| `doors.RaceSerial` (default) | one at a time, in order of arrival |
+| `doors.RaceParallel` | calls run concurrently; handler must synchronize shared state; `true` result stops new calls, removal after running calls finish |
+| `doors.RaceStrict` | one at a time; a call that arrives after a newer one is canceled instead of run (nothing is reordered; in-order calls all run) |
+
+Use `RaceStrict` when only the newest input matters (live search, autosave, selection), so an older call never overwrites a newer result. A canceled call is silent on event attrs (`OnError` does not run); `$hook`/`$fetch`/`$sys.emit` reject with a canceled `HookErr`. `Race` is backend-side; scopes are client-side and combine with it (`ScopeLatest` + `RaceStrict`). `ALink` hooks are always strict; resource hooks (`NewHook`, script/style sources) are always parallel.
+
+```gox
+<input (doors.AInput{
+    Race: doors.RaceStrict,
+    On: func(ctx context.Context, r doors.RequestInput) bool { return false },
+})/>
+```
+
+v0.16 removed the `Parallel bool` attr field and `Keys []Key`: `Parallel: true` → `Race: doors.RaceParallel`; `Keys: []doors.Key{a, b}` → `Keys: a.And(b)` or `doors.JoinKeys(a, b)`.
 
 ## Event Presets
 

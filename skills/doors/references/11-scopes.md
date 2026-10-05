@@ -35,7 +35,7 @@ scope := &doors.ScopeBlocking{}
 Scope: scope
 ```
 
-This is a client-side scheduling policy. Reusing the same activated hook already serializes that hook on the backend; `ScopeBlocking` prevents overlapping client requests before they are sent.
+This is a client-side scheduling policy. Calls to the same activated hook already run one at a time on the backend by default (see `Race` in `09-events.md`); `ScopeBlocking` prevents overlapping client requests before they are sent.
 
 ### ScopeSerial
 
@@ -78,7 +78,7 @@ Cancel previous in-flight work, keep only newest. Unlike debounce, replaces work
 scope := &doors.ScopeLatest{}
 ```
 
-Cancellation is client-side. The previous request may already have reached the server, so do not rely on `ScopeLatest` to protect writes; use it to end stale indication, ignore stale results, and keep the newest interaction in control of the UI.
+Cancellation is client-side. The previous request may already have reached the server, so do not rely on `ScopeLatest` to protect writes; use it to end stale indication, ignore stale results, and keep the newest interaction in control of the UI. To keep an older call from running after a newer one on the backend, also set `Race: doors.RaceStrict` on the attr (see `Race` in `09-events.md`).
 
 ### ScopeFrame
 
@@ -139,7 +139,7 @@ Each scope sees the event only after the previous accepted it.
 - Pair with indication for polished UX
 - `ScopeBlocking` is the simplest "prevent double-submit"
 - `ScopeRate` throttles events to a fixed minimum interval; first fires immediately, cooldown is not reset by new arrivals
-- `ScopeLatest` cancels in-flight indication and client-side work, but the request may already have been sent and will reach the server regardless
+- `ScopeLatest` cancels in-flight indication and client-side work, but the request may already have been sent and will reach the server regardless; pair it with `Race: doors.RaceStrict` when an older call must not run after a newer one
 
 ## Related
 

@@ -89,7 +89,7 @@ Returns a context canceled when the current **session** ends. Carries the sessio
 - `Source.Update` / `Source.Mutate`
 - `Beam.Read` / `ReadAndSub` / `Sub` / `Watch` — subscription attaches to the source, ends when the session ends
 - `Source.Get` / `Beam.Get` (latest value)
-- Door methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`, `Freeze`)
+- Door methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`)
 - Session-scoped goroutines/helpers
 - `doors.Session*` APIs (`SessionStore`, `SessionExpire`, `SessionEnd`, `SessionID`, `SessionLastSeen`)
 - `doors.Logger`
@@ -153,7 +153,7 @@ Subscription lifetime: registered from instance content, a subscription ends whe
 
 | Method | Required context |
 |--------|-----------------|
-| `Inner` / `Outer` / `Static` / `Reload` / `Unmount` / `Freeze` | Any Doors context — the handle carries the mounted node |
+| `Inner` / `Outer` / `Static` / `Reload` / `Unmount` | Any Doors context — the handle carries the mounted node |
 
 Door handle methods run with `SessionContext`, instance render context, `DetachedContext`, or `InstanceContext`. The top-level `doors.Reload(ctx)` helper is different: it needs an instance core and dynamic owner.
 
@@ -214,6 +214,7 @@ Starting point: handler/render ctx
 4. **Using `SessionContext` for `Call`, `Router`, `A(ctx, ...)`, or `InstanceStore`** — these need an instance core.
 5. **Waiting on completion channels during rendering** — deadlock or undefined behavior. Defer to `Go` or goroutine.
 6. **Using HTTP request context for instance-level Doors APIs** — panics. `r.Context()` carries session-level values, not instance-level. Just use the `ctx` provided directly.
+7. **Requesting Doors actions from an already-canceled context** (typically one kept by a goroutine that outlived its owner) — logs the warning `requested action from a canceled context` with `action` and `caller` attributes. `caller` is the file:line of the first frame outside Doors, with generated templates resolved to their `.gox` source — start debugging there. Use `InstanceContext(ctx)` or `SessionContext(ctx)` for long-running goroutines and awaited operations.
 
 ## Related
 
