@@ -68,11 +68,16 @@ Value survival across derived contexts: `InstanceContext` and `DetachedContext` 
 ```go
 func HasSession(ctx context.Context) bool   // ctx carries a Doors session (SessionID, SessionStore, ... accept it)
 func HasInstance(ctx context.Context) bool  // ctx belongs to a render/handler (instance APIs accept it); implies HasSession
+func IsDocument(ctx context.Context) bool   // ctx renders into the HTML of the page response
 func Logger(ctx context.Context) *slog.Logger // configured Doors logger; slog.Default fallback; any ctx, never panics
 func IDNumber(ctx context.Context) uint64   // instance-unique, non-sequential number; needs instance ctx
 ```
 
-`HasSession`/`HasInstance` never panic — use them to check which API level a context supports before calling.
+`HasSession`/`HasInstance`/`IsDocument` never panic. Use `HasSession`/`HasInstance` to check which API level a context supports before calling.
+
+`IsDocument(ctx)` is `true` while rendering the HTML page response (the page the browser loads), and `false` for anything rendered later. Use it to render slow content inline on page load and, on later updates, show a placeholder and load the content with `doors.DeferredInner` (loader pattern in [door.md](./07-door.md)).
+
+**Details:** `true` in the initial page render and every Door placed during it. `false` in every update (even one rendered before the response is sent), in handlers and callbacks, and with `DetachedContext` or `InstanceContext`. Contexts derived with the `context` package keep the value.
 
 ## Derived Contexts
 
@@ -89,7 +94,7 @@ Returns a context canceled when the current **session** ends. Carries the sessio
 - `Source.Update` / `Source.Mutate`
 - `Beam.Read` / `ReadAndSub` / `Sub` / `Watch` — subscription attaches to the source, ends when the session ends
 - `Source.Get` / `Beam.Get` (latest value)
-- Door methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`)
+- Door methods (`Inner`, `Outer`, `Static`, `DeferredInner`, `DeferredOuter`, `DeferredStatic`, `Reload`, `Unmount`)
 - Session-scoped goroutines/helpers
 - `doors.Session*` APIs (`SessionStore`, `SessionExpire`, `SessionEnd`, `SessionID`, `SessionLastSeen`)
 - `doors.Logger`
@@ -97,7 +102,7 @@ Returns a context canceled when the current **session** ends. Carries the sessio
 **NOT OK with SessionContext (panics):**
 
 - `doors.Instance*` APIs (`InstanceStore`, `InstanceEnd`, `InstanceID`, `InstanceLastSeen`), `IDNumber`
-- Top-level `doors.Reload`, `Router`, `Call`, `A(ctx, ...)`
+- Top-level `doors.Reload`, `doors.DeferredInner` / `DeferredOuter` / `DeferredStatic`, `Router`, `Call`, `A(ctx, ...)`
 
 `Beam.Effect` does not panic but returns `false` — it needs an instance runtime.
 
@@ -153,9 +158,9 @@ Subscription lifetime: registered from instance content, a subscription ends whe
 
 | Method | Required context |
 |--------|-----------------|
-| `Inner` / `Outer` / `Static` / `Reload` / `Unmount` | Any Doors context — the handle carries the mounted node |
+| `Inner` / `Outer` / `Static` / `DeferredInner` / `DeferredOuter` / `DeferredStatic` / `Reload` / `Unmount` | Any Doors context — the handle carries the mounted node |
 
-Door handle methods run with `SessionContext`, instance render context, `DetachedContext`, or `InstanceContext`. The top-level `doors.Reload(ctx)` helper is different: it needs an instance core and dynamic owner.
+Door handle methods run with `SessionContext`, instance render context, `DetachedContext`, or `InstanceContext`. The top-level `doors.Reload(ctx)` and `doors.DeferredInner` / `DeferredOuter` / `DeferredStatic(ctx, content)` helpers are different: they act on the closest dynamic parent of `ctx`, so they need an instance core and dynamic owner.
 
 ### Session / Instance Control
 
@@ -170,7 +175,7 @@ Door handle methods run with `SessionContext`, instance render context, `Detache
 | `SessionID(ctx)` | Session value in context |
 | `InstanceID(ctx)` | Instance core in context |
 | `IDNumber(ctx)` | Instance core in context |
-| `HasSession(ctx)` / `HasInstance(ctx)` | Any context (predicates, never panic) |
+| `HasSession(ctx)` / `HasInstance(ctx)` / `IsDocument(ctx)` | Any context (predicates, never panic) |
 | `Logger(ctx)` | Any context (falls back to `slog.Default`) |
 | `Router(ctx)` | Instance core in context |
 | `Call(ctx, action)` | Instance core + current Door (NOT SessionContext) |
@@ -209,7 +214,7 @@ Starting point: handler/render ctx
 ## Common Mistakes
 
 1. **Using `context.Background()` for session/instance APIs** — panics. Beam reads/subs accept it, but a subscription on a never-canceled context never ends.
-2. **Using `SessionContext` for `Reload`** — panics. SessionContext has no dynamic owner.
+2. **Using `SessionContext` for top-level `doors.Reload` or `doors.DeferredInner` / `DeferredOuter` / `DeferredStatic`** — panics. SessionContext has no dynamic owner.
 3. **Expecting a `Beam.Sub` made with `SessionContext` to end on unmount** — it lives until the session ends (or the context is canceled). Pick the context for the lifetime you want.
 4. **Using `SessionContext` for `Call`, `Router`, `A(ctx, ...)`, or `InstanceStore`** — these need an instance core.
 5. **Waiting on completion channels during rendering** — deadlock or undefined behavior. Defer to `Go` or goroutine.

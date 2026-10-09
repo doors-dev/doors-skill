@@ -70,9 +70,9 @@ A `Source` is also a `Beam` — every source can be read, subscribed, bound, and
 
 ```go
 func NewSource[T comparable](init T) Source[T]                            // uses == equality
-func NewSourceEqual[T any](init T, equal func(new, old T) bool) Source[T] // custom equality; equal runs under lock — must not panic or call into sources/beams
+func NewSourceEqual[T any](init T, equal func(old, new T) bool) Source[T] // custom equality; equal runs under lock — must not panic or call into sources/beams
 func NewSourceNoSkip[T comparable](init T) Source[T]                       // no-skip semantics
-func NewSourceEqualNoSkip[T any](init T, equal func(new, old T) bool) Source[T] // equal runs under lock — must not panic or call into sources/beams
+func NewSourceEqualNoSkip[T any](init T, equal func(old, new T) bool) Source[T] // equal runs under lock — must not panic or call into sources/beams
 ```
 
 `Source` and `Beam` values are handles. A struct field's zero value is nil; initialize it with `NewSource`, `DeriveSource`/`DeriveBeam`, or a parent-provided value before any `Bind`, `Effect`, `Read`, or `Update`.
@@ -81,7 +81,7 @@ func NewSourceEqualNoSkip[T any](init T, equal func(new, old T) bool) Source[T] 
 
 ```go
 func DeriveSource[T1 any, T2 comparable](source Source[T1], get func(T1) T2, set func(T1, T2) T1) Source[T2]
-func DeriveSourceEqual[T1 any, T2 any](source Source[T1], get func(T1) T2, set func(T1, T2) T1, equal func(new, old T2) bool) Source[T2] // equal runs under lock — must not panic or call into sources/beams
+func DeriveSourceEqual[T1 any, T2 any](source Source[T1], get func(T1) T2, set func(T1, T2) T1, equal func(old, new T2) bool) Source[T2] // equal runs under lock — must not panic or call into sources/beams
 ```
 
 `get` extracts the derived value. `set` receives current parent + new derived, returns next parent.
@@ -99,7 +99,7 @@ units := doors.DeriveSource(settings,
 
 ```go
 func DeriveBeam[T1 any, T2 comparable](source Beam[T1], get func(T1) T2) Beam[T2]
-func DeriveBeamEqual[T1 any, T2 any](source Beam[T1], get func(T1) T2, equal func(new, old T2) bool) Beam[T2] // equal runs under lock — must not panic or call into sources/beams
+func DeriveBeamEqual[T1 any, T2 any](source Beam[T1], get func(T1) T2, equal func(old, new T2) bool) Beam[T2] // equal runs under lock — must not panic or call into sources/beams
 ```
 
 ```go
@@ -163,7 +163,7 @@ func (p Path) days() int {
 
 ```go
 func TabState[T comparable](ctx context.Context, key string) Source[*T]
-func TabStateEqual[T any](ctx context.Context, key string, equal func(new, old T) bool) Source[*T] // nil equal → every update propagates
+func TabStateEqual[T any](ctx context.Context, key string, equal func(old, new T) bool) Source[*T] // nil equal → every update propagates
 ```
 
 Per-tab state that survives reload but stays out of the URL (open panel, draft filter, wizard step). Kept by the browser tab: survives reloads and in-app navigation, back/forward keep the latest value, not shared with other tabs, never in the URL. Stored as JSON — keep values small, the whole tab state travels on every page load and update.
@@ -183,7 +183,7 @@ elem (w Wizard) Main() {
 
 - After the sync the value is never `nil`; missing key reads as zero value.
 - `Update(ctx, nil)` removes the key.
-- A value set before the sync wins over the stored one.
+- A non-nil value set before the sync wins over the stored one.
 - Not for trust-bearing values (client-controlled); not a replacement for `InstanceStore` (dies with the instance) or the URL (shareable).
 - `ctx` must be a Doors render or handler context.
 

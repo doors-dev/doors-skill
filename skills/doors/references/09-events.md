@@ -189,8 +189,10 @@ A handler that hands work to a goroutine can keep the request pending past its r
 5. Run Before actions
 6. Send request to server
 7. Run Go handler
-8. Run After actions (on success)
+8. Run After actions (on success, once the DOM changes the handler triggered are applied)
 9. Run OnError actions (on failure)
+
+The indicator, the scope, After actions, and the `$hook` promise do not wait for content passed to deferred Door operations (`DeferredInner`/`DeferredOuter`/`DeferredStatic`).
 
 ## Attach Styles
 
@@ -248,8 +250,6 @@ Use `RaceStrict` when only the newest input matters (live search, autosave, sele
     On: func(ctx context.Context, r doors.RequestInput) bool { return false },
 })/>
 ```
-
-v0.16 removed the `Parallel bool` attr field and `Keys []Key`: `Parallel: true` → `Race: doors.RaceParallel`; `Keys: []doors.Key{a, b}` → `Keys: a.And(b)` or `doors.JoinKeys(a, b)`.
 
 ## Event Presets
 

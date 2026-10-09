@@ -287,7 +287,7 @@ beam.RouteBeam(routes ...RouteBeam[T]) gox.Elem
 **Match builders** (in order: general -> specific):
 ```go
 func RouteDerive[T1 any, T2 comparable](derive func(T1) (T2, bool)) DeriveRoute[T1, T2]
-func RouteDeriveEqual[T1 any, T2 any](derive func(T1) (T2, bool), equal func(T2, T2) bool) DeriveRoute[T1, T2]
+func RouteDeriveEqual[T1 any, T2 any](derive func(T1) (T2, bool), equal func(old, new T2) bool) DeriveRoute[T1, T2]
 func RouteMatch[T any](pred func(T) bool) MatchRoute[T]
 func RouteValue[T comparable](v T) MatchRoute[T]    // sugar for RouteMatch(== v)
 ```

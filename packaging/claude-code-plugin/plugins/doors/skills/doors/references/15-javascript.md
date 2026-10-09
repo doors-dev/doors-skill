@@ -192,6 +192,8 @@ Emit timing: a managed script loads from its own URL and runs once the browser h
 
 `specifier="app"` registers the module in the page's import map under that name, so any managed script can `await import("app")` to get its exports. This is the whole point of `specifier` — it's how you reference a server-served module from client code. `specifier` is only valid on modules (a `<script type="module">` or a `<link rel="modulepreload">`); using it elsewhere is an error.
 
+Render modules with `specifier` as part of the page (e.g. in the head). The import map is sent once with the page response and holds only specifiers from the page render, including every Door placed during it. A module first rendered by a later update (Door update, `Reload`, deferred content) does not register its specifier, so `import("app")` fails. Scripts rendered later can still import what the page registered.
+
 ### Pre-bundled module as bytes
 
 When the module is **already a self-contained ESM bundle** (e.g. built by an external esbuild/Bun/Vite step and embedded with `//go:embed`), serve the bytes directly and skip `bundle` — there are no dependencies left for Doors to resolve:

@@ -31,7 +31,7 @@ type Conf struct {
     RequestTimeout            time.Duration // one-request limit: server page render, browser hook/navigation requests (default 30s)
 
     ServerCacheControl            string // managed resource cache header (default: immutable 1y)
-    ServerDisableGzip             bool   // no gzip for HTML, door updates, managed resources
+    ServerDisableGzip             bool   // no gzip for HTML, managed resources
     ServerDisableHead             bool   // page HEAD answers 405; default renders the page for status + headers, no body (static files/resources always answer HEAD)
     ServerSessionCookiePrefix     string // prepended to session cookie name (e.g. __Host-)
     ServerSessionCookieNoSecure   bool   // omit Secure (dev only)
@@ -42,7 +42,7 @@ type Conf struct {
     SolitaireSyncTimeout            time.Duration // max wait for browser ack before ending instance (default InstanceTTL, capped at it)
     SolitaireFrameTime              time.Duration // max frame buffer time before flush (default ~33ms)
     SolitaireFrameSize              int           // max frame buffer bytes before flush (default 32 KB)
-    SolitaireDisableGzip            bool          // no gzip for action payloads
+    SolitaireDisableGzip            bool          // no gzip for door updates and action payloads
     SolitaireQueue                  int           // max updates awaiting delivery or ack; exceeding ends instance (default 1024)
     SolitairePending                int           // max delivered-but-unacked updates; at limit sending pauses (default 256)
     SolitaireDisableReportStreaming bool          // browser posts each message separately (auto fallback outside HTTP/2/3)
@@ -60,8 +60,8 @@ CSP off until `WithCSP` is called:
 
 ```go
 type CSP struct {
-    ScriptSources         []string   // append to 'self' + collected hashes + sources
-    StyleSources          []string   // append to 'self' + collected hashes + sources
+    ScriptSources         []string   // append to 'self' + import map hash (if any) + external script URLs
+    StyleSources          []string   // append to 'self' + external stylesheet URLs
     ConnectSources        []string   // append to 'self'
     DefaultSources        []string   // nil='self', []=omit, values=emit
     FormActions           []string   // default 'none', []=omit
@@ -74,12 +74,15 @@ type CSP struct {
     MediaSources          []string   // []=omit
     Sandbox               []string   // []=omit
     WorkerSources         []string   // []=omit
-    ScriptStrictDynamic   bool
     ReportTo              string     // only emits report-to directive
 }
 ```
 
-Doors auto-collects inline script/style hashes and `ResourceExternal(...)` URLs per page; `script-src` also carries the import map hash. Doors ships no stylesheet of its own (the `d0-r` rule is applied via a constructed stylesheet in the blocking head script), so a strict `style-src` needs no Doors resource origin.
+Managed scripts and stylesheets (incl. plain inline `<script>`/`<style>`) load from Doors URLs covered by `'self'`.
+
+Add external sources to `ScriptSources`/`StyleSources` yourself when a later update (Door update, `Reload`, deferred content) can render an external script/stylesheet the page did not, or when an external script loads other scripts (e.g. modules it imports). The header is sent once with the page response and holds only the exact external URLs rendered with the page, including every Door placed during it.
+
+Doors ships no stylesheet of its own (the `d0-r` rule is applied via a constructed stylesheet in the blocking head script), so a strict `style-src` needs no Doors resource origin.
 
 `ReportTo` only emits the `report-to` directive. Send the matching `Report-To` response header yourself in the app factory.
 

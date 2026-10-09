@@ -35,6 +35,7 @@ Re-renders happen only through these APIs:
 - `someBeam.Bind(fn)` — rerenders the returned fragment when value changes
 - `someBeam.Effect(ctx)` inside a dynamic container — rerenders the container
 - `door.Inner(ctx, ...)`, `door.Outer(ctx, ...)`, `door.Static(ctx, ...)` — replaces door content
+- `door.DeferredInner(ctx, ...)`, `door.DeferredOuter(ctx, ...)`, `door.DeferredStatic(ctx, ...)` — same, but waits until the current content is rendered and scheduled (placeholder first, slow content next)
 - `door.Reload(ctx)` — rerenders current door content
 - Updating a source that has subscribers downstream
 

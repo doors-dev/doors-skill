@@ -99,7 +99,7 @@ For generated downloads, use a fixed or sanitized `name`; do not echo uploaded f
 
 ## ResourceExternal
 
-Direct browser URL. `doors.ResourceExternal("https://...")` is a Go type conversion, not a constructor function. For script and stylesheet resources, it also registers the URL with `script-src` or `style-src` CSP collection:
+Direct browser URL. `doors.ResourceExternal("https://...")` is a Go type conversion, not a constructor function. When the tag is rendered with the page, it also adds the exact URL to CSP: `script-src` for `<script>` and `modulepreload` links, `style-src` for stylesheet links. Later updates add nothing; see CSP in [configuration.md](./21-configuration.md):
 ```gox
 <link href=(doors.ResourceExternal("https://cdn.example.com/app.css")) rel="stylesheet">
 ```

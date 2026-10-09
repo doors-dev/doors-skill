@@ -35,7 +35,7 @@ Ask the user only for product requirements that cannot be inferred from the code
 
 ## Core Mental Model
 - Each interactive page is a live server-side instance. There is no virtual DOM.
-- Components are static by default: `Main()` renders once and stays. Re-rendering is explicit and targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
+- Components are static by default: `Main()` renders once and stays. Re-rendering is explicit and targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`, `Deferred*`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
 - State derivation replaces virtual DOM diffing. For all reactive state, use a ladder: branch key owned at that level (often derived), narrower branches, then field/param/query binds only in consuming fragments.
 - `Route` swaps only when the matched branch changes; `Bind`/`Effect` rerender on subscribed value changes, so derive before binding.
 - Browser events call server handlers bound to the live page instance. If a subtree disappears, hooks and dynamic bindings inside it disappear too.
@@ -47,7 +47,7 @@ Ask the user only for product requirements that cannot be inferred from the code
 - Calls to the same hook run one at a time by default, in order of arrival (`doors.RaceSerial`). Different hooks can run in parallel. The `Race` field on any event attr or hook changes that: `doors.RaceParallel` runs its calls concurrently, `doors.RaceStrict` runs one at a time and cancels calls that arrive out of order. Resource hooks (`NewHook`, script/style sources) are always concurrent.
 - Scopes prevent UI artifacts from parallel hooks (e.g. blocking a related hook while another is in progress). Scopes are a client-side scheduling hint for UX, not a concurrency guarantee — do not rely on them for data safety.
 - When working with state beyond `doors.Source`/`doors.Beam` (plain struct fields, slices, maps, external caches), you must handle concurrency yourself. `Source`/`Beam` mutations are safe to call from any context; plain Go state is not.
-- Mutating operations — Door methods, `doors.Reload`, `Source.Update`/`Mutate`, `doors.Call` — return a `<-chan error` completion channel, optional to consume. Ignore it for fire-and-forget; never block on one during render (use `doors.Go`, a handler, or a detached context).
+- Mutating operations — Door methods, `doors.Reload`, `doors.DeferredInner`/`DeferredOuter`/`DeferredStatic`, `Source.Update`/`Mutate`, `doors.Call` — return a `<-chan error` completion channel, optional to consume. Ignore it for fire-and-forget; never block on one during render (use `doors.Go`, a handler, or a detached context).
 - Door content rendering and state propagation run in parallel across independent subtrees, but are coordinated so a render cycle sees one coherent view of all sources and derived beams.
 
 Key primitives:
@@ -75,7 +75,8 @@ After `references/00-gox.md`, read remaining references by task, not all at once
 | Work with `Source`, `Beam`, `Bind`, `Effect`, `Sub`, derived state, or consistency | `references/06-state.md` |
 | Update part of a page explicitly without full re-render | `references/07-door.md`, `references/06-state.md` |
 | Keep small per-tab UI state across reloads without putting it in the URL (`TabState`) | `references/06-state.md` |
-| `Bind`/`Effect` not enough — lazy loading, appending content, making finished content static, dropping rendered content from memory (`Once`), collections of dynamic regions, or other patterns needing low-level Door control | `references/07-door.md` |
+| Show a placeholder while slow content renders (skeleton, loader in a `Bind` or route, `doors.IsDocument` for the page response) — deferred ops | `references/07-door.md` |
+| `Bind`/`Effect` not enough — appending content, making finished content static, dropping rendered content from memory (`Once`), collections of dynamic regions, or other patterns needing low-level Door control | `references/07-door.md` |
 | A Door update or page render fails (`door rendering error` in the log, content missing or stale) | `references/07-door.md` |
 | Run code when content is delivered, cleared, or a dispatch batch settles (`OnReady`, `OnClean`, `OnSettle`), or keep indication pending past the handler (`HoldSettle`) | `references/07-door.md`, `references/12-indication.md` |
 | Build a reactive component or choose `Bind` vs `Effect` | `references/08-components.md` |
@@ -156,7 +157,7 @@ Use the Doors-provided context for state reads/updates, hooks, links, session/in
 
 User `context.WithValue` values do not flow into a render subtree automatically; wrap content with the `doors.Ctx(ctx)` proxy to propagate them to nested renders, event handlers, and later door updates. `SessionContext` drops user values.
 
-`doors.HasSession`/`doors.HasInstance` report what a context supports; `doors.SessionID`/`doors.InstanceID` (note the ID casing) return identifiers; `doors.Logger(ctx)` returns the configured logger; `doors.IDNumber(ctx)` returns an instance-unique `uint64`.
+`doors.HasSession`/`doors.HasInstance` report what a context supports; `doors.IsDocument` reports whether it renders into the page response; `doors.SessionID`/`doors.InstanceID` (note the ID casing) return identifiers; `doors.Logger(ctx)` returns the configured logger; `doors.IDNumber(ctx)` returns an instance-unique `uint64`.
 
 ### Components
 
@@ -200,11 +201,11 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 
 - `references/00-gox.md` - bundled Doors-specific GoX reference
 - `references/01-get-started.md` - project setup, starter clone, minimal project, project structure
-- `references/03-context.md` - Doors runtime context, `doors.Ctx` user values, Session/Instance/Detached contexts, `HasSession`/`HasInstance`, API compatibility tables
+- `references/03-context.md` - Doors runtime context, `doors.Ctx` user values, Session/Instance/Detached contexts, `HasSession`/`HasInstance`/`IsDocument`, API compatibility tables
 - `references/04-app.md` - `NewApp`, middleware, `UseFS`, `UseDir`, `UseResource`, HEAD requests, cache constants, mounting
 - `references/05-routing.md` - path models, params, query, `Route`, `RouteModel`, `Location`
 - `references/06-state.md` - `Source`, `Beam`, `Bind`, `Effect`, `Sub`, derivation, `TabState`, consistency, skipping
-- `references/07-door.md` - low-level dynamic containers: `Inner`, `Outer`, `Static` (content ownership), `Reload`, `Unmount`, `Once`, completion channels, render errors, lifecycle hooks (`OnReady`/`OnSettle`/`OnClean`/`HoldSettle`), growing content
+- `references/07-door.md` - low-level dynamic containers: `Inner`, `Outer`, `Static` (content ownership), deferred ops (`DeferredInner`/`DeferredOuter`/`DeferredStatic`, placeholder and loader), `Reload`, `Unmount`, `Once`, completion channels, render errors, lifecycle hooks (`OnReady`/`OnSettle`/`OnClean`/`HoldSettle`), growing content
 - `references/08-components.md` - reactive components, `Bind` vs `Effect`, struct patterns, constructors, state ownership, lifecycle
 - `references/09-events.md` - event attrs, request types, handler flow, forms, key `Keys` filters, per-hook `RequestTimeout`, reuse, `Race`
 - `references/10-navigation.md` - `ALink`, active links, programmatic navigation, `LocationEncoder`

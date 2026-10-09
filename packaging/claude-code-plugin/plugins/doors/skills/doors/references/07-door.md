@@ -26,7 +26,7 @@ Proxied element becomes the Door container. If the proxy has seed content (`<div
 ### Current State (render stored content)
 
 ```gox
-~(&p.body)
+<>~(&p.body)</>
 ```
 Uses the Door's last container or creates its own (`d0-r` tag with `display: contents`).
 
@@ -44,6 +44,9 @@ A Door can only be mounted in one place at a time.
 func (d *Door) Inner(ctx context.Context, content any) <-chan error  // replace children, keep container
 func (d *Door) Outer(ctx context.Context, outer any) <-chan error    // replace outer element, keep live handle
 func (d *Door) Static(ctx context.Context, content any) <-chan error // replace with static content (no longer live)
+func (d *Door) DeferredInner(ctx context.Context, content any) <-chan error  // Inner, after current content is rendered and scheduled
+func (d *Door) DeferredOuter(ctx context.Context, outer any) <-chan error    // Outer, deferred the same way
+func (d *Door) DeferredStatic(ctx context.Context, content any) <-chan error // Static, deferred the same way
 func (d *Door) Reload(ctx context.Context) <-chan error              // re-render current content
 func (d *Door) Unmount(ctx context.Context) <-chan error             // remove from DOM, keep content
 ```
@@ -65,6 +68,34 @@ Passing `nil` as content works for all content-taking methods:
 Static content belongs to the Door's parent: hooks, subscriptions, `doors.Go`, and lifecycle callbacks (`OnReady` included) registered while rendering it attach to the parent and live until the parent's content is cleared, even if the static render fails. Calls it makes during render (`doors.Call`) go through the parent too and are sent even if the static render fails. Nothing else stays on the parent, so a chain of `Static` appends keeps server memory flat (see Appending Content).
 
 `Static` issued from a beam subscription renders current state: the content sees a consistent snapshot, which can be newer than the value that triggered the subscription. Pass the value in when the content must match it.
+
+### Deferred operations
+
+`DeferredInner` / `DeferredOuter` / `DeferredStatic` = `Inner` / `Outer` / `Static`, but the operation waits until the Door's current content is rendered and scheduled for delivery. Use them to show a placeholder first and replace it with content that is slow to render:
+
+```gox
+func (p *Page) showReport(ctx context.Context, period string) {
+    p.report.Inner(ctx, <div class="skeleton">Loading report...</div>)
+    p.report.DeferredInner(ctx, ReportTable{period: period})
+}
+```
+
+Main use: a loader inside a `Bind` or route fragment (see Advanced Patterns → Loader).
+
+Package funcs take no Door and target the closest dynamic parent of `ctx` (the Door `ctx` renders in), so content can replace itself:
+
+```go
+func DeferredInner(ctx context.Context, content any) <-chan error
+func DeferredOuter(ctx context.Context, content any) <-chan error
+func DeferredStatic(ctx context.Context, content any) <-chan error
+```
+
+Details:
+
+- The current content stays mounted and working (hooks, subscriptions) while the new content renders; it is released right before the new content is scheduled. If its own update is still unsent by then, that update may be dropped, so a fast render can skip the placeholder. Plain ops release the current content as soon as they start.
+- A deferred op issued behind a pending op waits for it too. A newer plain op or a parent re-render supersedes it as it would a pending plain op; the deferred op then reports `context.Canceled`.
+- Package funcs are bound to the content `ctx` belongs to: if a newer op already replaced it, they do nothing and report `context.Canceled`. They replace the Door's whole content. In the root page render (outside any Door) they report an error; without a Doors render/handler ctx (including `SessionContext`) they panic.
+- A handler's dispatch batch does not wait for deferred content: `OnSettle`, the hook's indicator, scope, and `After` actions, and the `$hook` promise finish without it.
 
 ### Once
 
@@ -97,7 +128,7 @@ A marginal case: render functions return errors only if you return one yourself,
 - **Door operation** (`Inner`, `Outer`, `Static`, `Reload`): the error goes to its completion channel. The page keeps the previous content, but it no longer responds — its hooks and subscriptions were released when the operation started. The next successful operation replaces it. After a failed `Outer`, `Inner` fails until a new `Outer` succeeds or the parent renders the Door again; recover with a new `Outer`, not `Reload` (once an `Inner` was issued, `Reload` fails too). A failed `Static` still makes the Door static: later operations only update its stored state.
 - **Door rendered by its parent** (initial page or parent update): left out of the parent's output. Operations on it fail with a placement error until the parent renders it again.
 
-No error marker reaches the page (the old `Component Error` element is gone): to observe failures, read the operation's channel or the log. `AData` values are encoded and templ components rendered during the render pass, so an `AData` value that fails to encode or a templ error is a render error too.
+No error marker reaches the page: to observe failures, read the operation's channel or the log. `AData` values are encoded and templ components rendered during the render pass, so an `AData` value that fails to encode or a templ error is a render error too.
 
 ## Lifecycle
 
@@ -133,10 +164,12 @@ func HoldSettle(ctx context.Context) (release func())            // keep the dis
 - Acquire in render code, release in `OnClean`; never tie cleanup to `OnReady`. All panic if ctx is not a Doors ctx.
 
 ```gox
-~~
-sub := hub.Subscribe()
-doors.OnClean(ctx, func() { sub.Close() })
-~~
+<>
+    ~~
+    sub := hub.Subscribe()
+    doors.OnClean(ctx, func() { sub.Close() })
+    ~~
+</>
 ```
 
 ## Use Cases
@@ -146,6 +179,8 @@ doors.OnClean(ctx, func() { sub.Close() })
 | `Inner` | Keep container, change children |
 | `Outer` | Change root element/attributes |
 | `Static` | Region becomes plain rendered content |
+| `DeferredInner` / `DeferredOuter` / `DeferredStatic` | New content is slow: current content or a placeholder stays on the page, working, until it is ready |
+| `doors.IsDocument` + `doors.DeferredInner` | Loader: slow content complete in the page response, behind a placeholder on later renders |
 | `Reload` | Redraw current content (depends on external state) |
 | `Unmount` | Remove now, keep for reuse later |
 | `doors.Once(v)` | Don't keep rendered content in Door memory |
@@ -153,24 +188,49 @@ doors.OnClean(ctx, func() { sub.Close() })
 
 ## Advanced Patterns
 
-### Lazy Loading
+### Loader
 
-Render a placeholder first, replace it with heavy content after the page is visible. The Door is rendered during `Main()`, then `defer` replaces it with static content:
+Render slow content inline in the page response, and behind a quick skeleton on later renders. The common place is a `Bind` or route fragment, with the package function deferring the fragment's own slow part:
 
 ```gox
-elem (c chart) Main() {
+elem (p *Page) Main() {
+    ~(p.period.Bind(elem(period string) {
+        <section class="report">
+            ~(if doors.IsDocument(ctx) {
+                ~ReportTable{period: period}
+            } else {
+                ~~
+                doors.DeferredInner(ctx, ReportTable{period: period})
+                ~~
+                <div class="skeleton">Loading report...</div>
+            })
+        </section>
+    }))
+}
+
+type ReportTable struct {
+    period string
+}
+
+elem (t ReportTable) Main() {
     ~~
-    door := new(doors.Door)
-    defer door.Static(ctx, <img src=(c.load())/>)
+    rows := loadReport(ctx, t.period)
     ~~
-    <div>
-        ~(door)
-        <div>Loading...</div>
-    </div>
+    <table>
+        ~(for _, row := range rows {
+            <tr>
+                <td>~(row.Name)</td>
+                <td>~(row.Total)</td>
+            </tr>
+        })
+    </table>
 }
 ```
 
-This works because the Door is rendered before the deferred `Static` replaces it. The placeholder shows immediately; the real content replaces it after rendering completes.
+- Why `doors.IsDocument`: true only while rendering the page response (see 03-context.md), so the page arrives complete for users, crawlers and link previews; on later renders the skeleton goes out first.
+- Keep the placeholder inside an element that stays (the `<section>`): in a `Bind` or route, a fragment with a single root element uses it as the Door container, and `DeferredInner` replaces what is inside. To replace the root element itself, use `DeferredOuter`.
+- Outside a `Bind` or route, give the loader a Door of its own (`~>(new(doors.Door)) <section class="report">`): deferred content replaces the Door's whole content.
+- Do expensive work inside the heavy content's render, not when building the argument: arguments are evaluated before `DeferredInner` runs and delay the skeleton.
 
 ### Appending Content
 
