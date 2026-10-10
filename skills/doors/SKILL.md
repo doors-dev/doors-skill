@@ -207,7 +207,7 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 - `references/06-state.md` - `Source`, `Beam`, `Bind`, `Effect`, `Sub`, derivation, `TabState`, consistency, skipping
 - `references/07-door.md` - low-level dynamic containers: `Inner`, `Outer`, `Static` (content ownership), deferred ops (`DeferredInner`/`DeferredOuter`/`DeferredStatic`, placeholder and loader), `Reload`, `Unmount`, `Once`, completion channels, render errors, lifecycle hooks (`OnReady`/`OnSettle`/`OnClean`/`HoldSettle`), growing content
 - `references/08-components.md` - reactive components, `Bind` vs `Effect`, struct patterns, constructors, state ownership, lifecycle
-- `references/09-events.md` - event attrs, request types, handler flow, forms, key `Keys` filters, per-hook `RequestTimeout`, reuse, `Race`
+- `references/09-events.md` - event attrs, request types, handler flow, forms, key `Key` filters, per-hook `RequestTimeout`, reuse, `Race`
 - `references/10-navigation.md` - `ALink`, active links, programmatic navigation, `LocationEncoder`
 - `references/11-scopes.md` - blocking, serial, debounce, latest, frame, concurrent, sharing, pipelines
 - `references/12-indication.md` - indicators, selectors, combining, `ActionIndicate`

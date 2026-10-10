@@ -83,10 +83,10 @@ type KeyboardEvent struct { ... }  // Type, Key, Code, Repeat, CtrlKey, ShiftKey
 type RequestKeyboard = RequestEvent[KeyboardEvent]
 ```
 
-`AKeyDown`/`AKeyUp` filter with `Keys Keys` — fires when the event matches any key. A `Key` is a `Keys` value on its own; combine with `.And(...)` or `doors.JoinKeys(...)`:
+`AKeyDown`/`AKeyUp` filter with `Key Keys` — fires when the event matches any key. A `Key` is a `Keys` value on its own; combine with `.And(...)` or `doors.JoinKeys(...)`:
 
 ```go
-Keys: doors.Key{Key: "Enter"}.And(doors.Key{Key: "s", CtrlMod: doors.ModOn})
+Key: doors.Key{Key: "Enter"}.And(doors.Key{Key: "s", CtrlMod: doors.ModOn})
 ```
 
 ```go
@@ -163,7 +163,7 @@ Some also have:
 - `PreventDefault bool` (pointer/key events)
 - `StopPropagation bool` (pointer/key events and focus-in/focus-out)
 - `ExactTarget bool` (pointer/key events and focus-in/focus-out)
-- `Keys Keys` (key events — key + modifier matching, see [KeyboardEvent](#keyboardevent))
+- `Key Keys` (key events — key + modifier matching, see [KeyboardEvent](#keyboardevent))
 - `ExcludeValue bool` (input — omit value from payload)
 - `RequestTimeout time.Duration` (`ASubmit`/`ARawSubmit`, also `AHook`/`ARawHook` — overrides `Conf.RequestTimeout` per hook; regular event attrs do not have it)
 

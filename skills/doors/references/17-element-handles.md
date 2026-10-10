@@ -74,7 +74,7 @@ Zero-value attribute handle. Each event method returns `ActionInto[int]` dispatc
 Init structs carry only round-trip fields; unset fields use browser defaults:
 
 - `PointerEmit`: `PointerID`, `Buttons`, `Button`, `PointerType`, `IsPrimary`
-- `KeyboardEmit`: `Key`, `Code`, `Repeat`, `CtrlKey`, `ShiftKey`, `AltKey`, `MetaKey` — an event matching no key of `AKeyDown`/`AKeyUp` `.Keys` sends no request
+- `KeyboardEmit`: `Key`, `Code`, `Repeat`, `CtrlKey`, `ShiftKey`, `AltKey`, `MetaKey` — an event matching no key of `AKeyDown`/`AKeyUp` `.Key` sends no request
 - `FocusEmit`: empty — runs handlers without moving focus
 - `InputEmit`: `Data` — element values read from the event target
 - `ChangeEmit`: empty — values read from the event target, attach the emitter to the input/select
