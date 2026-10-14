@@ -49,7 +49,7 @@ type Source[T any] interface {
     Beam[T]
     Update(ctx context.Context, value T) <-chan error
     Mutate(ctx context.Context, f func(T) T) <-chan error
-    Route(routes ...RouteSource[T]) gox.Elem
+    Route(routes ...SourceRoute[T]) gox.Elem
 }
 
 type Beam[T any] interface {
@@ -59,7 +59,7 @@ type Beam[T any] interface {
     ReadAndSub(ctx context.Context, onValue func(context.Context, T) bool) (T, bool)
     Effect(ctx context.Context) (T, bool)
     Bind(f func(T) gox.Elem) gox.Elem
-    RouteBeam(routes ...RouteBeam[T]) gox.Elem
+    RouteBeam(routes ...BeamRoute[T]) gox.Elem
     Watch(ctx context.Context, w Watcher[T]) (context.CancelFunc, bool)
 }
 ```
@@ -245,33 +245,35 @@ Only check the last `ok` — `Effect` fails only on a canceled context (or one o
 
 ```gox
 ~(s.section.Route(
-    doors.RouteValue(SectionProfile).Comp(ProfilePanel{}),
-    doors.RouteValue(SectionBilling).Comp(BillingPanel{}),
-    doors.RouteDefaultComp[Section](ProfilePanel{}),
+    doors.RouteValue(SectionProfile, doors.RouteComp[Section](ProfilePanel{})),
+    doors.RouteValue(SectionBilling, doors.RouteComp[Section](BillingPanel{})),
+    doors.RouteComp[Section](ProfilePanel{}),
 ))
 ```
 
-Fragment swaps only when active route changes. Value changes that keep matching the same route do not rerender the route fragment. Within a matched route, use `Bind`, `Effect`, or derived values for the narrower data that fragment actually renders.
+Fragment swaps only when the chosen branch changes. Value changes that keep the same branch do not rerender it (`RouteBind` is the exception: it rerenders on every change). Within a branch, use `Bind`, `Effect`, or derived values for the narrower data that fragment actually renders.
 
-A `Source` is also a `Beam`, so `source.RouteBeam(routes...)` is available when the route branches only need read-only access.
+A `Source` is also a `Beam`, so `source.RouteBeam(routes...)` is available when the branches only need read-only access. `doors.Route(routes...)` routes the page URL (see [routing.md](./05-routing.md)). Each call renders one container, however deep the routes nest.
 
-**Render methods** on match builders produce route branches:
+**Leaves** render content and always match — one goes last as the fallback of its list; routes after it are never tried:
 
-| Method | Signature | Receives |
-|--------|-----------|----------|
-| `.Comp(comp)` | fixed `gox.Comp` | no reactive value |
-| `.Beam(render)` | `func(Beam[T]) gox.Elem` | live read-only beam |
-| `.Bind(render)` | `func(T) gox.Elem` | raw value directly (shorthand for Beam + bind) |
-| `.Source(render)` | `func(Source[T]) gox.Elem` | live writable source |
+| Leaf | Receives |
+|------|----------|
+| `RouteComp[T](comp)` | nothing: fixed `gox.Comp` (explicit `T` — not inferable) |
+| `RouteBind(func(T) gox.Elem)` | raw value, rerendered whenever it changes |
+| `RouteSource(func(Source[T]) gox.Elem)` | live writable source |
+| `RouteBeam(func(Beam[T]) gox.Elem)` | live read-only beam |
 
-`.Bind` is equivalent to `.Beam(func(b Beam[T]) gox.Elem { return b.Bind(render).Main() })`.
+**Groups** hold more routes and match when their condition holds and a child matches:
 
-**Default fallbacks** always match (place last):
+| Group | Condition |
+|-------|-----------|
+| `RouteMatch(pred, routes...)` | `pred(value)` is true |
+| `RouteValue(value, routes...)` | equal by the routed source's comparator (nil comparator never matches — use `RouteMatch`) |
+| `RouteDerive(derive, routes...)` | none of its own; children route on the derived source `derive` builds (usually `DeriveSource`), so it sits inside a `RouteMatch` or last |
+| `RouteModel[M](routes...)` | the `Location` decodes into `M`; children route on `Source[M]` |
 
-- `RouteDefaultComp[T](comp)` — fixed component (explicit type argument required — `T` is not inferable)
-- `RouteDefaultBeam(render)` — read-only beam
-- `RouteDefaultBind(render)` — raw value (shorthand for RouteDefaultBeam + bind)
-- `RouteDefault(render)` — writable source, only inside `source.Route(...)`
+Read-only twins for `RouteBeam` trees: `RouteBeamMatch`, `RouteBeamValue`, `RouteBeamDerive` (`func(Beam[T1]) Beam[T2]`, usually `DeriveBeam`), `RouteBeamModel`. `Route` accepts both kinds; `RouteSource` and the writable groups fit only under `Route` and other writable groups.
 
 ### Sub — manual subscription
 
@@ -301,7 +303,7 @@ Reading and subscribing work from any context. In a Doors context, subscriptions
 - `source.Update(ctx, value)` — set new value; any context allowed
 - `source.Mutate(ctx, fn)` — compute from old value; `fn` may run more than once when a concurrent update lands first — keep it side-effect free
 - Both return an optional completion channel: nil = propagated, `context.Canceled` = superseded by a newer update, closed without a value = suppressed (equal value or no subscribers)
-- Never wait on the channel during render; to wait, use `doors.Go` or your own goroutine with `DetachedContext`
+- Ignore the channel in most cases. Never wait on it during render or in beam subscriptions; to wait (backpressure for a fast producer), use a goroutine of your own with `DetachedContext`, or `doors.Go` when the wait should follow a rendered subtree
 
 ## Equality & Skipping
 

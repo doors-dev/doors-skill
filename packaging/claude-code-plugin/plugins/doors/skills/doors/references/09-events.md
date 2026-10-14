@@ -13,6 +13,7 @@ DOM events connected to Go handlers through special attributes.
 - [Attach Styles](#attach-styles)
 - [Reuse (activated attrs)](#reuse-activated-attrs)
 - [Race](#race)
+- [Batch](#batch)
 - [Event Presets](#event-presets)
 - [Unsupported Events](#unsupported-events)
 - [Related](#related)
@@ -155,6 +156,7 @@ Indicator // temporary client-side feedback (Indicators)
 Before    // client actions before request (Actions)
 OnError   // client actions on failure (Actions)
 Race      // how overlapping calls are handled on the backend (default RaceSerial), see Race below
+Batch     // apply the handler's page updates together, see Batch below
 ```
 
 Nil `On`: the request is still sent and accepted (body discarded unread) and the hook stays registered — an attr can be attached purely for its client-side effects or as an `Emitter` round-trip target. Omit the attr entirely when nothing is needed.
@@ -173,12 +175,12 @@ Some also have:
 - `false` — keep handler active (normal)
 - `true` — handler done, remove it (one-shot)
 
-A handler that hands work to a goroutine can keep the request pending past its return: `release := doors.HoldSettle(ctx)` keeps the indicator, the scope, and the `$hook` promise pending until `release()`. See [door.md](./07-door.md).
+A handler that hands work to a goroutine can keep the request pending past its return: `release := doors.HoldSettle(ctx)` keeps the indicator, the scope, and the `$hook` promise pending until `release()`; with `Batch` set, the updates stay unapplied until release. See [door.md](./07-door.md).
 
 ## Errors
 
 - Attaching an event/form/hook attr on a released door fails the render with `context.Canceled`.
-- Completion channels consumed inside handlers (`Call`, door operations) deliver sentinels for `errors.Is`: `ErrExecution` (action reached the browser and failed there), `ErrTerminated` (instance ended first).
+- Completion channels of `doors.Call` and door operations carry sentinels for `errors.Is`: `ErrExecution` (action reached the browser and failed there), `ErrTerminated` (instance ended first), delivered as the second value, on a detached ctx only. Do not wait on them in the handler; see [actions.md](./13-actions.md) and [door.md](./07-door.md).
 
 ## Flow
 
@@ -251,6 +253,27 @@ Use `RaceStrict` when only the newest input matters (live search, autosave, sele
 })/>
 ```
 
+## Batch
+
+Each Door update reaches the browser as soon as it is ready, so a handler that changes several places changes the page piece by piece. `Batch: true` (all event attrs, `AHook`, `ARawHook`, `ALink`) groups the paint: the handler runs and renders as before, and the browser applies its updates together when it finishes. The batch covers Door updates, the state propagation they trigger, and path changes made with the handler ctx.
+
+Set it on a handler that updates several Doors or stacked/nested components in one action, and on navigation links (see [navigation.md](./10-navigation.md)):
+
+```gox
+~>doors.AClick{
+    Batch: true,
+    On: func(ctx context.Context, r doors.RequestPointer) bool {
+        p.list.Inner(ctx, OrderList{status: status})
+        p.count.Inner(ctx, OrderCount{status: status})
+        return false
+    },
+} <button>Show ~(status)</button>
+```
+
+Do not wait in the handler for an update to be applied: completion channels on the handler ctx report scheduled only, batch or not. For a result from the browser, wait in a goroutine with `doors.DetachedContext(ctx)`, delivered outside the batch (see [context.md](./03-context.md#completion-channels)); to react once the updates are applied, use `doors.OnBatch` (see [door.md](./07-door.md#lifecycle-hooks)).
+
+`doors.HoldSettle` keeps the batch open until release. Title and meta updates are not batched. Batches held in the browser are bounded by `SolitairePending`; at the limit the oldest is applied early.
+
 ## Event Presets
 
 When the same `Scope`, `Indicator`, and `OnError` appear on every handler, wrap the full attr in a small struct implementing `doors.Attr`. It holds only the varying fields and delegates `Proxy`/`Modify` to the underlying `doors.A...` type:
@@ -306,4 +329,4 @@ Wire custom events in JS with `$hook(...)` or `$fetch(...)` + `AHook[T]`/`ARawHo
 - [navigation.md](./10-navigation.md) — `ALink`
 - [javascript.md](./15-javascript.md) — `AHook`, `$hook`
 - [shared-attr.md](./17-element-handles.md) — `Emitter` (synthetic events), `Setter`
-- [door.md](./07-door.md) — `HoldSettle`, lifecycle hooks
+- [door.md](./07-door.md) — `HoldSettle`, `OnBatch`, lifecycle hooks

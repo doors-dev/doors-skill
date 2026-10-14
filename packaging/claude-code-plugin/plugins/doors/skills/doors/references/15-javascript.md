@@ -109,6 +109,7 @@ type AHook[T any] struct {
     Indicator      Indicators
     RequestTimeout time.Duration  // overrides Conf.RequestTimeout for this hook
     Race           Race           // how overlapping calls are handled, see Race below
+    Batch          bool           // apply the handler's page updates together, see 09-events.md Batch
     On             func(ctx context.Context, r RequestHook[T]) (any, bool)
 }
 ```
@@ -124,6 +125,7 @@ type ARawHook struct {
     Indicator      Indicators
     RequestTimeout time.Duration
     Race           Race
+    Batch          bool
     On             func(context.Context, RequestRawHook) bool
 }
 ```
@@ -131,7 +133,7 @@ For raw body access, multipart, custom responses.
 
 ### Race
 
-Both hook attrs take `Race`, same as event attrs (see `09-events.md`): `doors.RaceSerial` (default, one at a time in order of arrival), `doors.RaceParallel`, `doors.RaceStrict`.
+Both hook attrs take `Race`, same as event attrs (see `09-events.md`): `doors.RaceSerial` (default, one at a time in order of arrival), `doors.RaceParallel`, `doors.RaceStrict`. `Batch` works as on event attrs too: the browser applies the handler's page updates together once it finishes.
 
 With `Race: doors.RaceParallel`, calls to the same hook run concurrently instead of one at a time. Handler must synchronize shared state itself. Returning `true` stops new calls; hook removed once running calls finish. For long-held streaming responses and independent parallel requests.
 

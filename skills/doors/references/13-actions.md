@@ -7,10 +7,11 @@ Prefer normal rendering/state for durable UI changes. Prefer `Setter` for shared
 ## Trigger Points
 
 ```go
-// Error channel optional; ignore it for fire-and-forget
+// Ignore the returned channel in most cases
 doors.Call(ctx, action)
 
-// Capture the client result with Into (don't wait during render)
+// Capture the client result with Into; wait for the second value only in a goroutine of your own
+// on a detached ctx, never during render or in beam subscriptions (see Call Results)
 var v T
 ch := doors.Call(ctx, doors.ActionEmit[T]{Name: "n", Arg: arg}.Into(&v))
 
@@ -43,7 +44,7 @@ type ActionScroll struct {
 }
 ```
 
-Scrolls the first matching element into view. If no element matches, the action fails (error on the completion channel).
+Scrolls the first matching element into view. If no element matches, the action fails (error as the second value on the completion channel, detached ctx only).
 
 ### ActionIndicate — fixed-duration indication
 
@@ -59,8 +60,15 @@ Not tied to request lifecycle. Lasts for `Duration`. Only Query/QueryAll indicat
 ### ActionTime — read the client clock
 
 ```go
-var now time.Time
-err := <-doors.Call(ctx, doors.ActionTime{}.Into(&now)) // in a handler or doors.Go, never during render
+go func(ctx context.Context) {
+    var now time.Time
+    ch := doors.Call(ctx, doors.ActionTime{}.Into(&now))
+    <-ch // scheduled
+    if err, ok := <-ch; !ok || err != nil {
+        return
+    }
+    // use now
+}(doors.DetachedContext(ctx))
 ```
 
 The reading keeps the browser's UTC offset, formatted like event timestamps.
@@ -75,7 +83,7 @@ type ActionLocationRawAssign struct{ URL string }         // literal absolute UR
 type ActionLocationRawReplace struct{ URL string }        // literal absolute URL, replace history entry
 ```
 
-For in-app navigation, prefer `ALink` or updating the `RouteModel` source.
+For in-app navigation, prefer `ALink` or updating the `Source` a `RouteSource` receives inside `RouteModel`.
 
 ## Combining
 
@@ -95,18 +103,31 @@ r.After(doors.JoinActions(
 
 ## Call Results
 
+In most cases, ignore the channel: whether the action runs depends on the lifetime of the content it was called from, and that is managed for you. When the browser must return a value, wait for the second value in a goroutine of your own on a detached ctx (only a detached ctx delivers it; see [context.md](./03-context.md#completion-channels)):
+
 ```go
-var picked string
-ch := doors.Call(ctx, doors.ActionEmit[string]{Name: "pick", Arg: "hello"}.Into(&picked))
-err, ok := <-ch  // ok==false when canceled; picked valid after nil
+On: func(ctx context.Context, r doors.RequestPointer) bool {
+    go func(ctx context.Context) {
+        var picked string
+        ch := doors.Call(ctx, doors.ActionEmit[string]{Name: "pick", Arg: "hello"}.Into(&picked))
+        <-ch // scheduled
+        if err, ok := <-ch; !ok || err != nil {
+            return
+        }
+        result.Inner(ctx, Picked{Value: picked})
+    }(doors.DetachedContext(ctx))
+    return false
+},
 ```
 
-- `Call(ctx, action) <-chan error`: nil = success, error = build/client/decode failure, closed empty = canceled
+- `Call(ctx, action) <-chan error`: first value = scheduled (`nil`, or build error). Detached ctx only: second value = `nil` (browser answered, dst written), error (client/decode failure), or `context.Canceled` (canceled after scheduling). Any other ctx: closes after the first value, dst unwritten, no error. Canceled before scheduling = `context.Canceled` as the first value
 - Match failures with `errors.Is`: `ErrExecution` = action reached the browser and failed there, `ErrTerminated` = instance ended first; location actions can also yield `ErrPathModel`/`ErrPathEncode` (see [routing](./05-routing.md))
 - `ActionEmit[T]` declares its result type; `.Into(&dst)` arms decoding. Fire-and-forget: `ActionEmit[any]{...}` without Into
 - `Emitter` event methods return `ActionInto[int]` — `.Into(&n)` captures hook requests triggered (any failure fails the call); `Setter.Set` counts live elements reached. See [element handles](./17-element-handles.md).
 - Into has no effect inside Before/After/OnError lists (no result transport)
-- Don't wait during render — use `Go` or goroutine with `DetachedContext`
+- Only a detached ctx delivers the result. Never wait on the channel during render or in beam subscriptions. Wait in a goroutine of your own with `DetachedContext(ctx)`; in `doors.Go` when the wait should follow a rendered subtree; with `InstanceContext(ctx)` when it should outlive the current owner
+- Batches (`Batch: true`, `OnBatch`) do not affect the channel; a `DetachedContext(ctx)` call is delivered outside the batch
+- A Door update and a `Call` made in the same handler are not ordered against each other unless the call is made from that Door's content
 
 ## OnError
 
@@ -115,7 +136,7 @@ err, ok := <-ch  // ok==false when canceled; picked valid after nil
 ## Rules
 
 - Prefer rendering/state over actions for durable UI changes
-- Ignore the `Call` error channel for fire-and-forget; capture results with `Into`
+- Ignore the `Call` channel in most cases; capture results with `Into` and wait only in a goroutine of your own
 - `$on(...)` handlers may return a Promise
 - Location actions = hard navigations (full reload). Use `ALink`/mutate source for in-app.
 - Actions run in order within a list. Location actions deferred to end of current client turn.

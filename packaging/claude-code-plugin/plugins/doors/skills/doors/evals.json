@@ -70,6 +70,7 @@
         "Uses doors.Route or related Route primitives in the rendered component tree.",
         "Uses ALink with Active configuration for current-page styling.",
         "Communicates and follows the Doors routing ladder: top-level RouteModel/path switch, narrower Route primitives for branches, then params/query binds only where consumed.",
+        "Nests route levels in one Route call instead of a second Route inside branch content, unless a layout must stay mounted.",
         "Distinguishes Route from Bind/Effect: Route keeps the branch while the match outcome stays the same; Bind/Effect rerender on subscribed value changes.",
         "Does not bind the whole path model at the page shell merely to branch on the section; uses Route primitives for the minimal page switch and handles path-derived data down-tree."
       ]
@@ -86,11 +87,12 @@
       ],
       "grading_assertions": [
         "Keeps one typed Path source of truth while routing or deriving smaller values for branches, params, query, page, and filters.",
-        "Uses doors.Route/RouteModel for URL model selection and path.Route with RouteMatch, RouteDerive, RouteValue, or RouteDefault* for route dispatch instead of path.Bind.",
+        "Uses doors.Route/RouteModel for URL model selection and path.Route with RouteMatch, RouteDerive, or RouteValue groups holding RouteComp/RouteBind/RouteSource/RouteBeam leaves for route dispatch instead of path.Bind; the fallback is a plain leaf placed last.",
         "Explains or implements that Route dispatch keeps the active branch while the active match stays the same, while Bind/Effect need derived state to stay targeted.",
         "Does not render a Page(path Source[Path]) pattern that binds the whole Path and branches only on p.Section.",
         "Keeps the top-level route switch minimal: it chooses the active page/segment, or handles truly global effects, and does not bind query, page, or filter fields there.",
-        "Uses RouteDerive, RouteMatch.Comp, or RouteDefaultComp when a branch only needs a smaller value or no routed value, rather than passing the full path by habit.",
+        "Uses RouteDerive inside RouteMatch, or a RouteComp leaf, when a branch only needs a smaller value or no routed value, rather than passing the full path by habit.",
+        "Nests route levels in one Route call instead of a second Route inside branch content, unless a layout must stay mounted.",
         "Ensures query, page, or filter changes within a section do not remount or rerender the entire page shell.",
         "Binds or effects narrower path-derived values inside the active page fragments that actually depend on those values."
       ]
@@ -164,7 +166,8 @@
         "Uses doors.Door when Bind/Effect alone is not the right fit for explicit partial updates.",
         "Mounts the Door in the template with the documented proxy or render form.",
         "Calls Door update methods from a handler or runtime-managed context, not from context.Background().",
-        "Accounts for lifecycle behavior when a dynamic parent unmounts or the Door is replaced."
+        "Accounts for lifecycle behavior when a dynamic parent unmounts or the Door is replaced.",
+        "Does not wait on the Door operation's completion channel in the handler."
       ]
     },
     {
@@ -187,7 +190,7 @@
         "Initializes any local Source fields before Bind/Update and uses GoX ~(...) interpolation rather than JSX-style {expr}; does not render a LoginPage with a nil message Source field.",
         "Does not call path.Update, auth.Update, or other state mutations from render paths such as Bind callbacks, Effect bodies, or GoX ~~...~~ blocks to redirect.",
         "Uses Route primitives for route dispatch with auth binding inside protected branches, or binds auth first only when the whole app shell is auth-gated and routes inside the authorized branch.",
-        "Uses RouteMatch(...).Comp(...) or RouteDefaultComp(...) for static/login branches that do not need the routed source, instead of .Source(...) with an ignored or forwarded path source.",
+        "Uses RouteMatch(pred, RouteComp[T](...)) or a RouteComp leaf for static/login branches that do not need the routed source, instead of RouteSource with an ignored or forwarded path source.",
         "Does not use whole-path Bind, path.Get inside an auth-only Bind, or pass a full doors.Source[Path] into any component that does not read or write the route."
       ]
     },
@@ -394,6 +397,75 @@
         "Tests runtime behavior through real browser actions and visible DOM/URL postconditions rather than calling handlers directly, mutating Source from the test, or only checking href/initial render.",
         "Builds or recommends a small Rod harness with Rod's default Chromium download behavior, CI NoSandbox only when needed, timeout-bound navigation, page/server cleanup, and user-visible assertions.",
         "Treats temporary Rod checks as an investigation aid for browser/runtime behavior, converts meaningful checks into committed e2e tests, and deletes one-off probes."
+      ]
+    },
+    {
+      "id": "batched-nav-links",
+      "prompt": "Add a sidebar nav to a Doors app whose pages load their data slowly; the page must not change piece by piece on navigation.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/00-gox.md",
+        "references/10-navigation.md",
+        "references/12-indication.md",
+        "references/05-routing.md"
+      ],
+      "grading_assertions": [
+        "Uses doors.ALink with Batch: true for the navigation links, so the current view stays intact until the new one is complete and view and URL swap at once.",
+        "Loads each page's data in the render of the target view, optionally with a skeleton and deferred operation, rather than preloading it into state before navigating.",
+        "Uses Active configuration on the links for current-page indication.",
+        "Does not use raw <a href> or hard navigation actions for in-app links.",
+        "Does not wait on completion channels or add manual synchronization to make the page switch at once."
+      ]
+    },
+    {
+      "id": "batched-multi-door-handler",
+      "prompt": "A status filter click updates the order list, its counter, and the toolbar, each its own Door; they must change in one step, then scroll to the top once the change is on the page.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/00-gox.md",
+        "references/09-events.md",
+        "references/07-door.md",
+        "references/13-actions.md"
+      ],
+      "grading_assertions": [
+        "Sets Batch: true on the AClick so the browser applies the Door updates together.",
+        "Calls the Door update methods with the handler ctx and ignores their completion channels.",
+        "Uses doors.OnBatch or the handler's After actions for the scroll follow-up, not <-door.Inner(...) or another wait in the handler.",
+        "Keeps the handler free of waits on completion channels."
+      ]
+    },
+    {
+      "id": "browser-result-wait",
+      "prompt": "On click, ask a JavaScript handler for the current selection and render it in a panel of a Doors page.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/00-gox.md",
+        "references/13-actions.md",
+        "references/15-javascript.md",
+        "references/03-context.md"
+      ],
+      "grading_assertions": [
+        "Uses ActionEmit[T]{...}.Into(&v) or the documented browser-result shape to get the selection back from the browser.",
+        "Waits for the result in a goroutine of its own with doors.DetachedContext(ctx) or doors.Go, never inside the handler, a render, or a subscription.",
+        "Updates the panel Door from that goroutine with the detached context.",
+        "Does not call the Into-armed action with the ctx of a handler that has Batch set; the detached context is used for it."
+      ]
+    },
+    {
+      "id": "review-completion-channel-waits",
+      "prompt": "Review this Doors diff: a click handler does <-door.Inner(ctx, ...) before continuing, a Sub callback does <-src.Update(ctx, ...), a render block does <-doors.Call(...), and page data is preloaded into a Source before the view renders.",
+      "must_trigger": true,
+      "expected_references": [
+        "references/00-gox.md",
+        "references/07-door.md",
+        "references/06-state.md",
+        "references/03-context.md"
+      ],
+      "grading_assertions": [
+        "Flags all three waits on completion channels: in the handler, in the Sub callback, and in the render block.",
+        "Proposes ignoring the channel, using doors.OnSettle or doors.OnBatch to react after updates, or waiting in a goroutine of its own with doors.DetachedContext(ctx) or doors.Go when the result is needed.",
+        "Recommends loading the data in the render of the view, with a skeleton and deferred operation if slow, instead of preloading it into a Source.",
+        "Does not recommend moving the wait into a hook, a handler, or a subscription."
       ]
     }
   ]

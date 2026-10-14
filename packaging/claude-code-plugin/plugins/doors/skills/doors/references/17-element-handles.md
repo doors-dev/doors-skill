@@ -80,7 +80,7 @@ Init structs carry only round-trip fields; unset fields use browser defaults:
 - `ChangeEmit`: empty — values read from the event target, attach the emitter to the input/select
 - `SubmitEmit`: empty — form data read from the event target, attach the emitter to the form
 
-`Into(&count)` captures the number of **hook requests** triggered, not elements reached: an attached element with no matching event attr adds nothing, a bubbling event adds one per event attr it reaches. Any failure among them fails the call. The action completes only after every triggered hook request has finished.
+`Into(&count)` captures the number of **hook requests** triggered, not elements reached: an attached element with no matching event attr adds nothing, a bubbling event adds one per event attr it reaches. Any failure among them fails the call. The action completes only after every triggered hook request has finished, so by the time its channel delivers the result (the second value, detached ctx only), the handlers have run. To wait for it, see [actions.md](./13-actions.md#call-results).
 
 Event attrs accept nil `On` (request accepted, body discarded, hook stays) — an attr can exist purely as an Emitter round-trip target or for client-side effects.
 

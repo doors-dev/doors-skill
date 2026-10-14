@@ -12,11 +12,12 @@ Pushing data from external sources (Kafka, Watermill, WebSocket, polling) into D
 
 ## Local: Component or Instance
 
-Start the goroutine where the data is consumed. Register it with `doors.OnReady` so it runs only after the markup it feeds is enqueued for the client; the callback's context is `DetachedContext`-equivalent — it:
+Start the goroutine where the data is consumed. Register it with `doors.OnReady` so it runs only after the markup it feeds is enqueued for the client; the callback's context is detached — it:
 
 - Stays bound to the current dynamic owner (component or instance)
-- Is detached from rendering frames (no deadlock)
+- Is detached from rendering (no deadlock)
 - Is canceled when the owner's content is cleared (replaced or unmounted)
+- Delivers completion results (see [context.md](./03-context.md#completion-channels))
 
 ```go
 type Profile struct {
@@ -69,7 +70,7 @@ elem (f profileView) showProfile(p Profile) {
 }))
 ```
 
-`doors.Go` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery, so Door updates made inside always land after their host markup. Best-effort: if the cycle fails or is superseded, `f` never runs (inside `Door.Static` content it belongs to the parent, so a failed static render does not drop it). Its context is equivalent to `DetachedContext` — canceled when the surrounding content is cleared.
+`doors.Go` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery, so Door updates made inside always land after their host markup. Best-effort: if the cycle fails or is superseded, `f` never runs (inside `Door.Static` content it belongs to the parent, so a failed static render does not drop it). Its context is detached — canceled when the surrounding content is cleared; completion channels deliver results in it.
 
 From imperative render code, `doors.OnReady(ctx, on)` gives the same timing guarantee: start streaming goroutines inside `on` so they never outrun the markup they target.
 
@@ -78,7 +79,7 @@ From imperative render code, `doors.OnReady(ctx, on)` gives the same timing guar
 - `DetachedContext` — keeps current dynamic ownership. Use when the goroutine needs to call Door methods (`Inner`, `Outer`) on the same Door it started from.
 - `InstanceContext` — switches ownership to the root of the instance. Use when the goroutine should outlive the current dynamic owner but still stop when the page closes.
 
-Both are detached from rendering frames. `Beam.Read`, `Sub`, `ReadAndSub`, and `Watch` work on them; subscriptions are owned by the dynamic owner (`DetachedContext`) or the instance root (`InstanceContext`). Only `Beam.Effect` and `Beam.Bind` belong in render code.
+Both are detached from rendering; completion channels deliver results on them. `Beam.Read`, `Sub`, `ReadAndSub`, and `Watch` work on them; subscriptions are owned by the dynamic owner (`DetachedContext`) or the instance root (`InstanceContext`). Only `Beam.Effect` and `Beam.Bind` belong in render code.
 
 ## Session-Scoped
 
@@ -167,6 +168,7 @@ Use `Watch` when you need to cancel the subscription explicitly — it returns a
 - `Source.Update` and `Source.Mutate` work from any context and return an optional `<-chan error` completion channel. `Source.Get`/`Beam.Get` also work anywhere (latest value, no consistency guarantees).
 - Start goroutines that push into freshly rendered content via `doors.Go` or `doors.OnReady` — their updates then land after the host markup.
 - Door handle methods (`Inner`, `Outer`, `Static`, `Reload`, `Unmount`) work from detached and session contexts and return an optional `<-chan error`.
+- Ignore those channels in most cases. A producer that must pace itself may wait on one here — this is a goroutine of your own — never in render or beam subscriptions. Read both values; only a detached ctx (the ones above) delivers the second.
 - For session-scoped state, always use `SessionStore.Init` in the app factory — it guarantees one goroutine per session regardless of how many pages are open.
 - Do not start session-scoped goroutines from component `Main()` — they would multiply per page instance.
 

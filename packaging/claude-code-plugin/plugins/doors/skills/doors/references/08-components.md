@@ -151,11 +151,12 @@ Wrap a component in `<>...</>` to force re-initialization on each navigation —
 
 ```gox
 ~(path.Route(
-    doors.RouteMatch(func(p Path) bool { return p.Route == Selector }).
-        Comp(<>
+    doors.RouteMatch(func(p Path) bool { return p.Route == Selector },
+        doors.RouteComp[Path](<>
             ~(LocationSelector(func(ctx context.Context, city int) { ... }))
         </>),
-    doors.RouteDefaultComp[Path](WeatherDashboard{}),
+    ),
+    doors.RouteComp[Path](WeatherDashboard{}),
 ))
 ```
 

@@ -50,6 +50,7 @@ elem NotFound() {
 - Render `<title>` and `<meta>` directly — Doors places them in `<head>`
 - Use `name` or `property` on `<meta>` for identification
 - Title/meta update on client when live page rerenders
+- Title/meta updates apply as soon as they render, outside any batch: with `Batch` on a handler or `ALink`, or inside `OnBatch`, the title changes before the batched view lands. Render the title with the view it describes; do not count on it switching together.
 - `Status` only affects initial response, not later instance updates
 
 ## Related

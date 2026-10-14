@@ -3,7 +3,7 @@ name: doors
 description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Always read the bundled Doors-specific GoX reference first. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, GoX, and framework-specific conventions.
 license: Apache-2.0
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   language: go
 ---
 
@@ -37,17 +37,17 @@ Ask the user only for product requirements that cannot be inferred from the code
 - Each interactive page is a live server-side instance. There is no virtual DOM.
 - Components are static by default: `Main()` renders once and stays. Re-rendering is explicit and targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`, `Deferred*`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
 - State derivation replaces virtual DOM diffing. For all reactive state, use a ladder: branch key owned at that level (often derived), narrower branches, then field/param/query binds only in consuming fragments.
-- `Route` swaps only when the matched branch changes; `Bind`/`Effect` rerender on subscribed value changes, so derive before binding.
+- `Route` swaps only when the matched branch changes (a `RouteBind` leaf rerenders on value change); `Bind`/`Effect` rerender on subscribed value changes, so derive before binding.
 - Browser events call server handlers bound to the live page instance. If a subtree disappears, hooks and dynamic bindings inside it disappear too.
-- Lifecycle hooks tie work to render delivery: `OnReady` (content enqueued for the client), `OnClean` (content cleared), `OnSettle` (current dispatch batch processed), `HoldSettle` (keep indicators, scopes, and the `$hook` promise pending until released).
+- Lifecycle hooks tie work to render delivery: `OnReady` (content enqueued for the client), `OnClean` (content cleared), `OnSettle` (everything the handler started is queued for delivery), `OnBatch` (a group of updates applied in the browser at once), `HoldSettle` (keep indicators, scopes, and the `$hook` promise pending until released).
 - A session is shared across browser pages/tabs. An instance is one live page with its own render tree, handlers, subscriptions, and lifecycle. Sessions are created lazily on first actual touch of a session API.
 
 ### Concurrency
 
-- Calls to the same hook run one at a time by default, in order of arrival (`doors.RaceSerial`). Different hooks can run in parallel. The `Race` field on any event attr or hook changes that: `doors.RaceParallel` runs its calls concurrently, `doors.RaceStrict` runs one at a time and cancels calls that arrive out of order. Resource hooks (`NewHook`, script/style sources) are always concurrent.
+- Calls to the same hook run one at a time by default, in order of arrival (`doors.RaceSerial`). Different hooks can run in parallel. The `Race` field on any event attr or hook changes that: `doors.RaceParallel` runs its calls concurrently, `doors.RaceStrict` runs one at a time and cancels calls that arrive out of order. Resource hooks (`NewHook`, script/style sources) are always concurrent. `Batch`, next to `Race`, makes the browser apply a handler's updates together.
 - Scopes prevent UI artifacts from parallel hooks (e.g. blocking a related hook while another is in progress). Scopes are a client-side scheduling hint for UX, not a concurrency guarantee — do not rely on them for data safety.
 - When working with state beyond `doors.Source`/`doors.Beam` (plain struct fields, slices, maps, external caches), you must handle concurrency yourself. `Source`/`Beam` mutations are safe to call from any context; plain Go state is not.
-- Mutating operations — Door methods, `doors.Reload`, `doors.DeferredInner`/`DeferredOuter`/`DeferredStatic`, `Source.Update`/`Mutate`, `doors.Call` — return a `<-chan error` completion channel, optional to consume. Ignore it for fire-and-forget; never block on one during render (use `doors.Go`, a handler, or a detached context).
+- Mutating operations — Door methods, `doors.Reload`, `doors.DeferredInner`/`DeferredOuter`/`DeferredStatic`, `Source.Update`/`Mutate`, `doors.Call` — return a `<-chan error` completion channel. Ignore it; see Rendering.
 - Door content rendering and state propagation run in parallel across independent subtrees, but are coordinated so a render cycle sees one coherent view of all sources and derived beams.
 
 Key primitives:
@@ -60,7 +60,7 @@ Key primitives:
 | `Route*` | State-based branching between views |
 | Hook attrs (`AClick`, `AInput`, `ASubmit`, etc.) | Server-bound DOM events |
 | `Setter` / `Emitter` | Stateless element handles: set attributes on / dispatch synthetic DOM events to attached live elements |
-| `OnReady` / `OnSettle` / `OnClean` / `HoldSettle` | Lifecycle hooks tied to render delivery and dispatch batches |
+| `OnReady` / `OnSettle` / `OnBatch` / `OnClean` / `HoldSettle` | Lifecycle hooks tied to render delivery and update application |
 
 ## Reference Map
 After `references/00-gox.md`, read remaining references by task, not all at once.
@@ -70,7 +70,7 @@ After `references/00-gox.md`, read remaining references by task, not all at once
 | Always read before any Doors work | `references/00-gox.md` |
 | Create a project, inspect starter layout, or add static files | `references/01-get-started.md`, `references/04-app.md`, `references/21-configuration.md` |
 | Work with app creation, middleware, mounting, static dirs, or resources at fixed paths | `references/04-app.md` |
-| Choose the right context, start goroutines, wait on completion channels, propagate user context values (`doors.Ctx`), or handle detached work | `references/03-context.md` |
+| Choose the right context, start goroutines, wait on a completion channel (only in a goroutine of your own), propagate user context values (`doors.Ctx`), or handle detached work | `references/03-context.md` |
 | Define/edit routes, path models, route variants, params, query, or fallbacks | `references/05-routing.md`, `references/10-navigation.md` |
 | Work with `Source`, `Beam`, `Bind`, `Effect`, `Sub`, derived state, or consistency | `references/06-state.md` |
 | Update part of a page explicitly without full re-render | `references/07-door.md`, `references/06-state.md` |
@@ -78,10 +78,10 @@ After `references/00-gox.md`, read remaining references by task, not all at once
 | Show a placeholder while slow content renders (skeleton, loader in a `Bind` or route, `doors.IsDocument` for the page response) — deferred ops | `references/07-door.md` |
 | `Bind`/`Effect` not enough — appending content, making finished content static, dropping rendered content from memory (`Once`), collections of dynamic regions, or other patterns needing low-level Door control | `references/07-door.md` |
 | A Door update or page render fails (`door rendering error` in the log, content missing or stale) | `references/07-door.md` |
-| Run code when content is delivered, cleared, or a dispatch batch settles (`OnReady`, `OnClean`, `OnSettle`), or keep indication pending past the handler (`HoldSettle`) | `references/07-door.md`, `references/12-indication.md` |
+| Run code when content is delivered, cleared, queued for delivery, or applied in the browser (`OnReady`, `OnClean`, `OnSettle`, `OnBatch`), or keep indication pending past the handler (`HoldSettle`) | `references/07-door.md`, `references/12-indication.md` |
 | Build a reactive component or choose `Bind` vs `Effect` | `references/08-components.md` |
-| Add click/input/change/submit/key/focus handlers or forms, or choose how overlapping calls are handled (`Race`) | `references/09-events.md`, `references/11-scopes.md`, `references/12-indication.md`, `references/13-actions.md` |
-| Add navigation links, active links, or programmatic navigation | `references/10-navigation.md`, `references/12-indication.md` |
+| Add click/input/change/submit/key/focus handlers or forms, choose how overlapping calls are handled (`Race`), or apply a handler's updates together (`Batch`) | `references/09-events.md`, `references/11-scopes.md`, `references/12-indication.md`, `references/13-actions.md` |
+| Add navigation links (batched by default), active links, or programmatic navigation | `references/10-navigation.md`, `references/12-indication.md` |
 | Add loading/pending feedback during requests (indicators, CSS classes, attributes) | `references/12-indication.md` |
 | Control request scheduling: prevent double-clicks, rate-limit, debounce, queue, cancel stale | `references/11-scopes.md` |
 | Run browser-side actions before/after/on-error, emit JS events, scroll, read the client clock, or hard navigate | `references/13-actions.md` |
@@ -103,6 +103,8 @@ Read `09-events`, `11-scopes`, `12-indication`, and `13-actions` before changing
 
 The `On` callback is optional on all event, form, and hook attrs: with nil `On` the request is still accepted (body discarded) and the hook stays registered, e.g. as an `Emitter` round-trip target. Exception: `AHook[T]` still decodes the body into `T`, so an empty or invalid body answers 400.
 
+Set `Batch: true` on a handler that updates several Doors or stacked/nested components in one action, so the browser applies them together; see `references/09-events.md`. Do not wait in the handler for an update to be applied; to act once it is on the page, use `doors.OnBatch`.
+
 After successful form flows, prefer updating the route source so the page reroutes in place. Do not use hard navigation actions for ordinary in-app transitions.
 
 ## Implementation Defaults
@@ -117,11 +119,12 @@ Sessions are lazy: the cookie is set immediately, but session state is allocated
 
 ### Rendering
 
-- Rendering and state propagation happen on the Doors runtime. It's normal to query DB or call APIs while rendering.
-- Dynamic containers render on the instance goroutine pool by default.
+- Rendering, state propagation, and hook execution are managed by the Doors runtime. Load data where you render it: query the database or call an API right in the render. If that is too slow, render a skeleton and replace it with a deferred operation; see `references/07-door.md`.
+- Ignore the completion channels of Door operations, `Source.Update`/`Mutate`, and `doors.Call` in most cases; there is nothing to check.
+- Never wait on them during render or in beam subscriptions. If the result is needed (backpressure in advanced setups, data coming back from the browser), wait in a goroutine of your own with `doors.DetachedContext(ctx)`, or in `doors.Go` when the work should follow a rendered subtree. Only a detached ctx (`DetachedContext`, `InstanceContext`, `doors.Go`, `OnReady`/`OnBatch` callback ctx) delivers a result: every channel first sends a scheduled value, and only a detached ctx gets the second (applied / `Into` result); on any other ctx it closes after the first and an `Into` destination stays unwritten. Read both values. Batches do not change this. See `references/03-context.md#completion-channels`.
+- To react after updates use callbacks: `doors.OnSettle` (updates queued for delivery), `doors.OnBatch` (applied in the browser). `OnReady`/`OnBatch` callbacks get a detached ctx; `OnSettle`'s does not and must not block. Use `doors.OnReady` to start work that must not outrun the markup it targets, `doors.OnClean` for teardown when content is cleared, and `doors.HoldSettle` when a handler hands work to another goroutine but indicators, scopes, and the `$hook` promise must stay pending until it finishes.
 - Use `doors.Parallel()` only for independent slow render fragments. Do not put it in front of `Bind`, `Effect`, `Route`, or `doors.Door` rendering; dynamic containers already render on the instance goroutine pool.
 - Use `doors.Go(f)` for background work scoped to a rendered subtree's lifetime; `f` starts only after the surrounding render cycle is enqueued for delivery, so its Door updates land after the host markup.
-- Use `doors.OnReady` to start work that must not outrun the markup it targets, `doors.OnClean` for teardown when content is cleared, `doors.OnSettle` for a callback after the current dispatch batch is processed, and `doors.HoldSettle` when a handler hands work to another goroutine but indicators, scopes, and the `$hook` promise must stay pending until it finishes.
 - Treat dynamic subtrees as runtime-managed. Direct DOM work is possible but should complement the runtime, not race against it.
 - Do not return errors from render code: render loading failures, missing data, and other error states as content. A failed render sends nothing to the browser, leaves the previous content on the page but detached, and is only logged as `door rendering error`; see `references/07-door.md`.
 
@@ -131,9 +134,9 @@ Prefer typed path models for normal app routing. A path model decodes the URL in
 
 Old bool marker fields and old ``path:"..."`` tags are compatibility syntax. In old tags, `path` is used as the tag key instead of a path prefix key such as `/`, `/posts`, or `"/post/:ID"`. If you encounter them while changing routing, convert to the int variant prefix-tag form unless the user explicitly asks for a compatibility-only edit.
 
-When changing routing, inspect the existing model first, add variants to the existing model when appropriate, put fallbacks last, and do not treat a route match as authorization. Prefer `doors.Route`, `RouteModel`, `source.Route`, `RouteMatch`, `RouteDerive`, `RouteValue`, and defaults for dispatch. `.Route` keeps the active branch when the active match stays the same; a branch inside `Bind` rerenders on every subscribed value change. Do not `Bind` the whole path at the page shell to switch on one field; the ladder is path/model branch key, then narrower derived branch keys, then params/query effects or binds only where consumed.
+When changing routing, inspect the existing model first, add variants to the existing model when appropriate, put fallbacks last, and do not treat a route match as authorization. Build routes from groups (`RouteModel[M]`, `RouteMatch`, `RouteValue`, `RouteDerive`) that hold leaves (`RouteComp`, `RouteBind`, `RouteSource`, `RouteBeam`); nest levels in one `doors.Route` or `source.Route` call instead of a second `Route` inside branch content, unless a layout must stay mounted. A leaf always matches, so the fallback is a plain leaf placed last. `.Route` keeps the active branch when the active match stays the same (a `RouteBind` leaf rerenders on value change); a branch inside `Bind` rerenders on every subscribed value change. Do not `Bind` the whole path at the page shell to switch on one field; the ladder is path/model branch key, then narrower derived branch keys, then params/query effects or binds only where consumed.
 
-Don't use raw `<a href="/path">` for in-app links — this causes a full page reload. Always use `doors.ALink` to avoid full page reloads. See `references/10-navigation.md`.
+Don't use raw `<a href="/path">` for in-app links — this causes a full page reload. Always use `doors.ALink`, and set `Batch: true` on navigation links by default: the current view stays intact until the new one is complete, then is replaced at once. See `references/10-navigation.md`.
 
 ### State
 
@@ -143,7 +146,7 @@ Keep identifiers, filters, pagination, selection, route values, and small UI sta
 
 Treat source values as immutable. If a source holds a slice, map, pointer, or mutable struct, replace it with a new value instead of mutating it in place. Apply the granularity ladder to all state, not only URLs: route on branch keys, derive fields, and bind/effect only where consumed.
 
-`Update`/`Mutate` return `<-chan error` completion channels: nil means propagated, `context.Canceled` means superseded by a newer update, closed without a value means suppressed. Consuming them is optional; never wait on one during render.
+`Update`/`Mutate` return `<-chan error` completion channels: nil means propagated, `context.Canceled` means superseded by a newer update, closed without a value means suppressed. Ignore them; never wait on one during render or in beam subscriptions.
 
 Render callbacks should render from current state rather than perform route changes or other state mutations. For navigation, update the route source from event handlers, app factory/bootstrap code, or another runtime-managed side-effect path.
 
@@ -201,14 +204,14 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 
 - `references/00-gox.md` - bundled Doors-specific GoX reference
 - `references/01-get-started.md` - project setup, starter clone, minimal project, project structure
-- `references/03-context.md` - Doors runtime context, `doors.Ctx` user values, Session/Instance/Detached contexts, `HasSession`/`HasInstance`/`IsDocument`, API compatibility tables
+- `references/03-context.md` - Doors runtime context, `doors.Ctx` user values, Session/Instance/Detached contexts, completion channel semantics (detached vs not), `HasSession`/`HasInstance`/`IsDocument`, API compatibility tables
 - `references/04-app.md` - `NewApp`, middleware, `UseFS`, `UseDir`, `UseResource`, HEAD requests, cache constants, mounting
-- `references/05-routing.md` - path models, params, query, `Route`, `RouteModel`, `Location`
+- `references/05-routing.md` - path models, params, query, `Route`, route groups and leaves, nesting, fallbacks, `Location`
 - `references/06-state.md` - `Source`, `Beam`, `Bind`, `Effect`, `Sub`, derivation, `TabState`, consistency, skipping
-- `references/07-door.md` - low-level dynamic containers: `Inner`, `Outer`, `Static` (content ownership), deferred ops (`DeferredInner`/`DeferredOuter`/`DeferredStatic`, placeholder and loader), `Reload`, `Unmount`, `Once`, completion channels, render errors, lifecycle hooks (`OnReady`/`OnSettle`/`OnClean`/`HoldSettle`), growing content
+- `references/07-door.md` - low-level dynamic containers: `Inner`, `Outer`, `Static` (content ownership), deferred ops (`DeferredInner`/`DeferredOuter`/`DeferredStatic`, placeholder and loader), `Reload`, `Unmount`, `Once`, completion channels, render errors, lifecycle hooks (`OnReady`/`OnSettle`/`OnBatch`/`OnClean`/`HoldSettle`), growing content
 - `references/08-components.md` - reactive components, `Bind` vs `Effect`, struct patterns, constructors, state ownership, lifecycle
-- `references/09-events.md` - event attrs, request types, handler flow, forms, key `Key` filters, per-hook `RequestTimeout`, reuse, `Race`
-- `references/10-navigation.md` - `ALink`, active links, programmatic navigation, `LocationEncoder`
+- `references/09-events.md` - event attrs, request types, handler flow, forms, key `Key` filters, per-hook `RequestTimeout`, reuse, `Race`, `Batch`
+- `references/10-navigation.md` - `ALink`, `Batch`, active links, programmatic navigation, `LocationEncoder`
 - `references/11-scopes.md` - blocking, serial, debounce, latest, frame, concurrent, sharing, pipelines
 - `references/12-indication.md` - indicators, selectors, combining, `ActionIndicate`
 - `references/13-actions.md` - `Call`, `Into`, `ActionEmit[T]`, `ActionScroll`, `ActionIndicate`, `ActionTime`, location actions, `ErrExecution`/`ErrTerminated`/`ErrPathModel`/`ErrPathEncode` sentinels

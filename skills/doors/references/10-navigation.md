@@ -11,6 +11,7 @@ Declarative navigation on `<a>` elements:
 ```gox
 ~>doors.ALink{
     Model: Path{Section: SectionHome},
+    Batch: true,
 } <a>Home</a>
 ```
 
@@ -23,16 +24,20 @@ Active   // optional: rules for applying active-link indication
 StopPropagation // optional: stop the click event from bubbling
 HistoryReplace  // optional: replace current history entry instead of pushing a new one
 After    // optional: actions after successful navigation (ALink-specific field)
+Batch    // recommended: apply the navigation's updates together
 // + all shared event lifecycle fields: Scope, Indicator, Before, OnError
 ```
 
-All links share one built-in latest scope, so a new click cancels a pending navigation; on the backend the link hook is `RaceStrict`, so a click that arrives out of order is canceled instead of run. `OnError` has no default — a failed navigation reverts the optimistic URL change (v0.14 defaulted nil `OnError` to `ActionLocationReload{}`; it no longer does).
+Set `Batch: true` on navigation links by default; it is almost universally a good idea: the current view stays intact until the new one is complete, then is replaced at once. Without it the page changes piece by piece as each part is ready. See [events.md](./09-events.md#batch).
+
+All links share one built-in latest scope, so a new click cancels a pending navigation; on the backend the link hook is `RaceStrict`, so a click that arrives out of order is canceled instead of run. `OnError` has no default — a failed navigation reverts the optimistic URL change.
 
 ### Behavior
 
 - Click intercepted → hook updates location source → page re-routes in place
 - ALink always navigates dynamically on normal clicks
 - A click that changes neither path nor query sends no request
+- A navigation to the URL already shown changes nothing: the location is equal, so no route is re-checked, no view re-renders, and no history entry is pushed. The same applies when a new URL decodes into an equal path model (e.g. a query parameter the model has no field for). To act on a click to the current page, use `After` actions or a handler, not routing
 - `href` set from encoded model (for browser features: middle-click, Cmd-click, "open in new tab")
 - Opening in a new tab is a fresh initial request, like any other direct page load
 - Client updates browser URL to link `href` before hook runs
@@ -46,7 +51,7 @@ All links share one built-in latest scope, so a new click cancels a pending navi
 
 ## Programmatic Navigation
 
-Update the `Source` received from `RouteModel`:
+Update the `Source` a `RouteSource` receives inside `RouteModel`:
 
 ```go
 // Replace entirely
@@ -65,7 +70,7 @@ Or update the raw location directly:
 doors.Router(ctx).Update(ctx, newLocation)
 ```
 
-`Update`/`Mutate` return `<-chan error`; ignore for fire-and-forget.
+`Update`/`Mutate` return `<-chan error`; ignore it. A programmatic navigation made with a handler ctx joins that handler's batch when it has `Batch` set.
 
 ### History Replace
 

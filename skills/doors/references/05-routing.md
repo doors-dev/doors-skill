@@ -2,7 +2,7 @@
 
 URL is reactive state in Doors. Routing = branching content on `doors.Source[doors.Location]`.
 
-Path models are the normal way to do app routing. They decode URLs into typed Go values and encode those values back into URLs. You can route directly on `Location` using the same state routing primitives (`RouteMatch`, `RouteDerive`, etc.) without a path model, or implement a custom routing system on top of `doors.Router(ctx)`. See the "Source/Beam-Level Routing" section below for the primitive API.
+Path models are the normal way to do app routing. They decode URLs into typed Go values and encode those values back into URLs. Routes are leaves (render content) and groups (choose between the routes inside them); groups nest, and one `Route` call renders one container however deep. The same leaves and groups route directly on `Location` without a path model, or on any `Source`/`Beam`; you can also build a custom routing system on top of `doors.Router(ctx)`. See [Route Builders](#route-builders) and [Source/Beam-Level Routing](#sourcebeam-level-routing).
 
 ## Contents
 
@@ -37,13 +37,20 @@ elem (a App) Main() {
     <html lang="en">
         <body>
             ~(doors.Route(
-                doors.RouteModel(Page),
-                doors.RouteDefaultComp[doors.Location](NotFound{}),
+                doors.RouteModel[Path](
+                    doors.RouteMatch(func(p Path) bool { return p.Section == SectionHome }, doors.RouteComp[Path](Home{})),
+                    doors.RouteMatch(func(p Path) bool { return p.Section == SectionDocs }, doors.RouteBind(DocsPage)),
+                    doors.RouteMatch(func(p Path) bool { return p.Section == SectionTutorial }, doors.RouteBind(TutorialPage)),
+                    doors.RouteMatch(func(p Path) bool { return p.Section == SectionLicense }, doors.RouteComp[Path](License{})),
+                ),
+                doors.RouteComp[doors.Location](NotFound{}),
             ))
         </body>
     </html>
 }
 ```
+
+`RouteModel[Path]` matches when the URL decodes into `Path`; the routes inside work on the decoded value. `NotFound` is a leaf, so it always matches and goes last: it catches URLs that do not decode and URLs that decode but match nothing inside the model route.
 
 ## Key Types
 
@@ -208,35 +215,62 @@ Don't mix `url.Values` field with `query` tags.
 ### Top-Level
 
 ```go
-func Route(routes ...RouteSource[Location]) gox.Elem         // writable routes for current URL
-func RouteModel[M any, C gox.Comp](render func(Source[M]) C) RouteSource[Location]  // decode URL into model
-func RouteModelBeam[M any, C gox.Comp](render func(Beam[M]) C) RouteBeam[Location] // read-only model route
+func Route(routes ...SourceRoute[Location]) gox.Elem                    // writable routes for current URL
+func RouteModel[M any](routes ...SourceRoute[M]) SourceRoute[Location]   // decode URL into model, route on it
+func RouteBeamModel[M any](routes ...BeamRoute[M]) BeamRoute[Location]   // read-only model route
 ```
 
-Routes are tried in order; a branch rerenders only when the matching route changes. If no route matches, nothing renders.
+Routes are tried in order, depth first; the first leaf reached wins. A chosen branch rerenders only when a different route should show (`RouteBind` is the exception: it rerenders on every value change). If no route matches, nothing renders.
 
-### Fallbacks
+`RouteModel[M]` matches when the URL decodes into `M` and a route inside matches. A URL that decodes but matches nothing inside falls through to the next sibling, usually the 404 leaf.
+
+### Leaves
+
+Leaves render content and always match. A leaf is the fallback of its list: put it last, routes after it are never tried.
 
 ```go
-func RouteDefault[T any, C gox.Comp](render func(Source[T]) C) RouteSource[T]
-func RouteDefaultComp[T any](comp gox.Comp) RouteBeam[T]
-func RouteDefaultBeam[T any, C gox.Comp](render func(Beam[T]) C) RouteBeam[T]
-func RouteDefaultBind[T any, C gox.Comp](render func(T) C) RouteBeam[T]
+func RouteComp[T any](comp gox.Comp) BeamRoute[T]                          // fixed component; nil renders nothing
+func RouteBind[T any](render func(v T) gox.Elem) BeamRoute[T]              // rendered from the value, again on every change
+func RouteSource[T any](render func(s Source[T]) gox.Elem) SourceRoute[T]  // receives the writable source
+func RouteBeam[T any](render func(b Beam[T]) gox.Elem) BeamRoute[T]        // receives a read-only beam
 ```
 
 Use `T = doors.Location` for top-level `doors.Route(...)` fallbacks.
 
+- `RouteBind` for small stateless views where rerendering is cheap.
+- `RouteSource`/`RouteBeam` when the content holds state (inputs, own sources) or is expensive to render; it renders once per entry and follows later values through its source/beam with `Bind`, `Effect`, or derived values inside.
+- `RouteComp[T](nil)` renders nothing for the matched values and stops fall-through to later routes.
+
+`RouteComp` renders the same component value each time its branch is entered — its state persists across switches. To start fresh on each entry, wrap it in an element, `doors.RouteComp[T](<>~(MyComp{})</>)`, or use a value-receiver component that initializes in `Main`. This is a common source of bugs.
+
+### Groups
+
+```go
+func RouteMatch[T any](match func(v T) bool, routes ...SourceRoute[T]) SourceRoute[T]                      // pred holds and a child matches
+func RouteValue[T any](value T, routes ...SourceRoute[T]) SourceRoute[T]                                   // value equal and a child matches
+func RouteDerive[T1, T2 any](derive func(Source[T1]) Source[T2], routes ...SourceRoute[T2]) SourceRoute[T1] // children route on the derived source
+```
+
+Read-only twins: `RouteBeamMatch`, `RouteBeamValue`, `RouteBeamDerive` (`func(Beam[T1]) Beam[T2]`), `RouteBeamModel`.
+
+- A group matches when its condition holds and a child matches; otherwise routing moves on to its next sibling. A group with no children never matches.
+- A chosen branch stays mounted while the conditions on its path hold, even if an earlier route would now match too; it is not rerendered by updates that keep it chosen. A showing leaf gives way to an earlier route that starts matching.
+- `RouteDerive` has no condition of its own; put it inside a `RouteMatch` unless it should take everything that reaches it. The derive function only builds the derived source/beam with `DeriveSource`/`DeriveBeam` (`DeriveSourceEqual`/`DeriveBeamEqual` for a custom comparator); it runs on every render of the container, shown or not. While the derived value stays equal, nothing below is checked or rerendered.
+- `RouteValue` compares with the comparator of the source it routes (`==` for `NewSource`, `DeriveSource`, `DeriveBeam`; your function for the `Equal` variants). A source with a nil comparator never matches a `RouteValue`; use `RouteMatch`. Match a route enum, predicate, or derived value, not a whole path model with params or query fields.
+
 ### Route Granularity Ladder
 Keep one typed path source of truth, but route and subscribe at the narrowest level that owns the concern:
 
-1. **Top level:** `doors.Route(doors.RouteModel(...), fallback)` chooses the path model. If broad state has global effects (auth shell, layout, head/status), handle it at that owner.
-2. **Segment/page switch:** inside a path model, use `path.Route(...)` with `RouteMatch`, `RouteDerive`, `RouteValue`, and defaults. This switch should be minimal.
-3. **Branch data:** pass the path source to a branch only when it needs to write the path; otherwise use `RouteDerive(...).Beam(...)` for read-only smaller route values, or `RouteDerive(...).Source(set, render)` only when the child writes that derived value back.
+1. **Top level:** `doors.Route(doors.RouteModel[Path](...), doors.RouteComp[doors.Location](NotFound{}))` chooses the path model. If broad state has global effects (auth shell, layout, head/status), handle it at that owner.
+2. **Segment/page switch:** inside the model route, `RouteMatch`/`RouteValue` groups with one leaf each. This switch should be minimal.
+3. **Branch data:** give a branch `RouteSource` only when it needs to write the path. Otherwise narrow it: `RouteBeamDerive` built from `DeriveBeam` for a read-only smaller route value, `RouteDerive` built from `DeriveSource` only when the child writes that derived value back. Both usually sit inside a `RouteMatch`.
 4. **Params/query:** bind or effect params, query, filters, and pagination inside the page fragments that actually render them.
 
-`.Route` is not just syntactic branching. It subscribes to the routed value but swaps the door only when the matched route changes. `Bind` and `Effect` rerender on subscribed value changes; derive first when they should react to only one field. Direct path binds are usually not needed for routing.
+Levels nest in one `Route` call and one container. Use a second `Route` call inside leaf content only when a layout must stay mounted while the routes inside switch; that inner call starts over each time its branch is entered.
 
-Avoid this top-level dispatch because it rerenders on every `Path` change, including unrelated query or param updates:
+`Route` is not just syntactic branching. It subscribes to the routed value but swaps the container only when the chosen route changes. `Bind` and `Effect` rerender on subscribed value changes; derive first when they should react to only one field. Direct path binds are usually not needed for routing.
+
+Avoid this dispatch because it rerenders on every `Path` change, including unrelated query or param updates:
 
 ```gox
 elem Page(path doors.Source[Path]) {
@@ -250,71 +284,43 @@ elem Page(path doors.Source[Path]) {
 }
 ```
 
-Use Route primitives for the page switch:
+Use groups and leaves for the page switch:
 
 ```gox
-elem Page(path doors.Source[Path]) {
-    ~(path.Route(
-        doors.RouteMatch(func(p Path) bool { return p.Section == SectionReports }).Bind(ReportsPage),
-        doors.RouteMatch(func(p Path) bool { return p.Section == SectionHome }).Comp(HomePage{}),
-        doors.RouteDefaultComp[Path](NotFound{}),
-    ))
-}
+~(doors.Route(
+    doors.RouteModel[Path](
+        doors.RouteMatch(func(p Path) bool { return p.Section == SectionReports }, doors.RouteSource(ReportsPage)),
+        doors.RouteMatch(func(p Path) bool { return p.Section == SectionHome }, doors.RouteComp[Path](HomePage{})),
+    ),
+    doors.RouteComp[doors.Location](NotFound{}),
+))
 ```
 
 If a branch only needs a derived route value, pass that value instead of the whole path:
 
 ```gox
-~(path.Route(
-    doors.RouteDerive(func(p Path) (string, bool) { return p.ReportID, p.Section == SectionReportDetail }).Beam(ReportDetail),
-    doors.RouteDefaultComp[Path](ReportsIndex{}),
-))
+doors.RouteModel[Path](
+    doors.RouteBeamMatch(func(p Path) bool { return p.Section == SectionReportDetail },
+        doors.RouteBeamDerive(func(path doors.Beam[Path]) doors.Beam[string] {
+            return doors.DeriveBeam(path, func(p Path) string { return p.ReportID })
+        }, doors.RouteBeam(ReportDetail)),
+    ),
+    doors.RouteComp[Path](ReportsIndex{}),
+),
 ```
 
-Use `.Source(set, render)` on `RouteDerive` only when the child must write the derived value back into the parent path model. Do not use `RouteValue(Path{...})` on whole path models that contain pointers, slices, maps, `url.Values`, or query fields. It either will not compile or will compare the wrong thing. Match a comparable route enum, predicate, or derived value.
+Use the writable `RouteDerive` with `DeriveSource` only when the child must write the derived value back into the parent path model; otherwise `RouteBeamDerive`.
 
 ### Source/Beam-Level Routing
 
-For routing on any `Source[T]` or `Beam[T]` (not just `Location`):
+For routing on any `Source[T]` or `Beam[T]` (not just `Location`), with the same leaves and groups:
 
 ```go
-source.Route(routes ...RouteSource[T]) gox.Elem
-beam.RouteBeam(routes ...RouteBeam[T]) gox.Elem
+source.Route(routes ...SourceRoute[T]) gox.Elem   // writable tree
+beam.RouteBeam(routes ...BeamRoute[T]) gox.Elem   // read-only tree
 ```
 
-`RouteBeam[T]` routes are accepted wherever `RouteSource[T]` is; a `.Source(...)` route is not accepted by `Beam.RouteBeam`.
-
-**Match builders** (in order: general -> specific):
-```go
-func RouteDerive[T1 any, T2 comparable](derive func(T1) (T2, bool)) DeriveRoute[T1, T2]
-func RouteDeriveEqual[T1 any, T2 any](derive func(T1) (T2, bool), equal func(old, new T2) bool) DeriveRoute[T1, T2]
-func RouteMatch[T any](pred func(T) bool) MatchRoute[T]
-func RouteValue[T comparable](v T) MatchRoute[T]    // sugar for RouteMatch(== v)
-```
-
-**Render methods** on matchers:
-```go
-// MatchRoute
-func (m MatchRoute[T]) Comp(comp gox.Comp) RouteBeam[T]
-func (m MatchRoute[T]) Beam(render func(Beam[T]) gox.Elem) RouteBeam[T]
-func (m MatchRoute[T]) Bind(render func(T) gox.Elem) RouteBeam[T]    // shorthand for Beam + bind, receives raw value
-func (m MatchRoute[T]) Source(render func(Source[T]) gox.Elem) RouteSource[T]
-
-// DeriveRoute
-func (r DeriveRoute[T1, T2]) Beam(render func(Beam[T2]) gox.Elem) RouteBeam[T1]
-func (r DeriveRoute[T1, T2]) Bind(render func(T2) gox.Elem) RouteBeam[T1]  // shorthand for Beam + bind
-func (r DeriveRoute[T1, T2]) Source(set func(T1, T2) T1, render func(Source[T2]) gox.Elem) RouteSource[T1]
-```
-
-**Default fallbacks:**
-
-When passing a component directly to `.Comp()` (e.g. `.Comp(MyPage{})`), the same Go value is reused across branch switches — its state persists. If you want the component to start fresh each time the route re-enters, wrap it in an element: `.Comp(<>~MyComp{}</>)`. This is a common source of bugs.
-```go
-func RouteDefaultComp[T any](comp gox.Comp) RouteBeam[T]
-func RouteDefault[T any, C gox.Comp](render func(Source[T]) C) RouteSource[T]
-func RouteDefaultBeam[T any, C gox.Comp](render func(Beam[T]) C) RouteBeam[T]
-func RouteDefaultBind[T any, C gox.Comp](render func(T) C) RouteBeam[T]     // shorthand for RouteDefaultBeam + bind
-```
+`BeamRoute[T]` routes are accepted wherever `SourceRoute[T]` is. `RouteSource` and the writable groups (`RouteMatch`, `RouteValue`, `RouteDerive`, `RouteModel`) fit only under `Route` and other writable groups; a read-only group inside a `Route` tree makes its own subtree read-only. Don't confuse the method `x.RouteBeam(routes...)`, which starts a read-only tree, with the leaf `doors.RouteBeam(render)`, which fits in any tree.
 
 ## Direct Location Access
 
@@ -357,13 +363,13 @@ Error sentinels, matched with `errors.Is`: `ErrPathModel` = invalid path model d
 
 ## Multiple Models
 
-List in order of specificity — first match wins:
+List in order of specificity — the first model that decodes the URL and has a matching route inside wins:
 ```gox
 ~(doors.Route(
-    doors.RouteModel(renderHome),
-    doors.RouteModel(renderPost),
-    doors.RouteModel(renderCatalog),
-    doors.RouteDefaultComp[doors.Location](NotFound{}),
+    doors.RouteModel[HomePath](doors.RouteComp[HomePath](Home{})),
+    doors.RouteModel[PostPath](doors.RouteBind(PostPage)),
+    doors.RouteModel[CatalogPath](doors.RouteSource(Catalog)),
+    doors.RouteComp[doors.Location](NotFound{}),
 ))
 ```
 

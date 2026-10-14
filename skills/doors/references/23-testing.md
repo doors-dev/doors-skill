@@ -33,7 +33,7 @@ Good unit-test targets:
 Use e2e tests when the behavior exists because the runtime, browser, or client script is involved:
 
 - A hook mutates a `Source` and the DOM rerenders
-- `Bind`, `Effect`, `Route`/`RouteBeam`, route-derived `Source`/`Beam`, or `RouteModelBeam` selects the right subtree
+- `Bind`, `Effect`, `Route`/`RouteBeam`, route-derived `Source`/`Beam`, or `RouteBeamModel` selects the right subtree
 - `ALink` updates the current instance, creates a new instance, or works with browser back/forward
 - Form/input/key/pointer capture settings affect event payloads
 - `Door.Inner`, `Door.Outer`, `Door.Static`, or `Door.Reload` calls update the intended dynamic parent
@@ -235,6 +235,7 @@ For runtime behavior, a good test has a visible precondition, a real browser act
 - For `ALink`, click the rendered link. Do not replace a link test with `page.MustNavigate(...)`; direct URL entry is a separate test.
 - For `Door` updates, assert the mounted container and the changed child content. Do not only assert that some text appears somewhere.
 - For routing/history, assert both DOM and URL/history when those are part of the behavior.
+- For a batched handler or link (`Batch: true`), wait for the final DOM state.
 - Do not stop at “element exists” or “href is correct” when the feature is supposed to perform a runtime transition.
 
 Bad tests often pass while testing nothing: they inspect initial HTML only, mutate state from the test process, call handlers directly, assert generated internals, or replace a browser transition with a direct navigation.
@@ -255,7 +256,7 @@ Do not reach for Rod for pure logic, formatting, validation, path encoding, quer
 - Use stable selectors such as `id` or `data-testid`; do not depend on incidental layout text for controls.
 - Do not assert generated Doors attribute names, hook IDs, or resource hashes unless testing those internals directly.
 - Close pages created by helpers when tests open many pages or run large suites, for example with `t.Cleanup(page.MustClose)`, unless intentionally keeping the page open for the test duration.
-- Render errors leave no marker in the page (a failed Door is left out or keeps stale, detached content): when a Door does not update, check the app log for `door rendering error`, or read the operation's completion channel.
+- Render errors leave no marker in the page (a failed Door is left out or keeps stale, detached content): when a Door does not update, check the app log for `door rendering error`.
 - Keep request timeouts realistic. Very low app request timeouts can create confusing client-system failures instead of testing the behavior you care about.
 - In Linux CI, use `launcher.NoSandbox(true)` when Chromium sandboxing is unavailable.
 - For manual Safari testing over plain `http://localhost`, configure `ServerSessionCookieNoSecure: true`; Chromium accepts secure cookies on localhost, Safari does not.

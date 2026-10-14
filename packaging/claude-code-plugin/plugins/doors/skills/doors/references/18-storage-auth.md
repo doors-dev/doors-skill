@@ -93,17 +93,19 @@ Route matching is not authorization. Use Route primitives for route dispatch, th
 ```gox
 elem ProtectedPage(path doors.Source[Path], auth doors.Source[Session]) {
     ~(path.Route(
-        doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard }).Source(elem(dash doors.Source[Path]) {
-            ~(auth.Bind(elem(s Session) {
-                ~(if !s.Authorized {
-                    ~(NewLoginPage(auth))
-                } else {
-                    ~(Dashboard{user: s.User, auth: auth, path: dash})
-                })
-            }))
-        }),
-        doors.RouteMatch(func(p Path) bool { return p.Route == RouteLogin }).Comp(NewLoginPage(auth)),
-        doors.RouteDefaultComp[Path](HomePage{}),
+        doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard },
+            doors.RouteSource(elem(dash doors.Source[Path]) {
+                ~(auth.Bind(elem(s Session) {
+                    ~(if !s.Authorized {
+                        ~(NewLoginPage(auth))
+                    } else {
+                        ~(Dashboard{user: s.User, auth: auth, path: dash})
+                    })
+                }))
+            }),
+        ),
+        doors.RouteMatch(func(p Path) bool { return p.Route == RouteLogin }, doors.RouteComp[Path](NewLoginPage(auth))),
+        doors.RouteComp[Path](HomePage{}),
     ))
 }
 ```
@@ -116,8 +118,8 @@ If the whole app shell requires authorization, it is also fine to bind auth firs
         ~(NewLoginPage(auth))
     } else {
         ~(path.Route(
-            doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard }).Comp(Dashboard{}),
-            doors.RouteDefaultComp[Path](HomePage{}),
+            doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard }, doors.RouteComp[Path](Dashboard{})),
+            doors.RouteComp[Path](HomePage{}),
         ))
     })
 }))
@@ -126,16 +128,18 @@ If the whole app shell requires authorization, it is also fine to bind auth firs
 For larger branch-local auth logic, keep route dispatch in `.Route(...)` and compute only the auth-dependent body inside the matched branch:
 
 ```gox
-doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard }).Source(elem(dash doors.Source[Path]) {
-    ~(auth.Bind(elem(s Session) {
-        ~~
-            if !s.Authorized {
-                return NewLoginPage(auth).Main()
-            }
-            return Dashboard{user: s.User, auth: auth, path: dash}.Main()
-        ~~
-    }))
-})
+doors.RouteMatch(func(p Path) bool { return p.Route == RouteDashboard },
+    doors.RouteSource(elem(dash doors.Source[Path]) {
+        ~(auth.Bind(elem(s Session) {
+            ~~
+                if !s.Authorized {
+                    return NewLoginPage(auth).Main()
+                }
+                return Dashboard{user: s.User, auth: auth, path: dash}.Main()
+            ~~
+        }))
+    }),
+)
 ```
 
 Avoid this shape:

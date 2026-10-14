@@ -95,7 +95,7 @@ Details:
 - The current content stays mounted and working (hooks, subscriptions) while the new content renders; it is released right before the new content is scheduled. If its own update is still unsent by then, that update may be dropped, so a fast render can skip the placeholder. Plain ops release the current content as soon as they start.
 - A deferred op issued behind a pending op waits for it too. A newer plain op or a parent re-render supersedes it as it would a pending plain op; the deferred op then reports `context.Canceled`.
 - Package funcs are bound to the content `ctx` belongs to: if a newer op already replaced it, they do nothing and report `context.Canceled`. They replace the Door's whole content. In the root page render (outside any Door) they report an error; without a Doors render/handler ctx (including `SessionContext`) they panic.
-- A handler's dispatch batch does not wait for deferred content: `OnSettle`, the hook's indicator, scope, and `After` actions, and the `$hook` promise finish without it.
+- A handler does not wait for deferred content: `OnSettle`, the hook's indicator, scope, and `After` actions, and the `$hook` promise finish without it.
 
 ### Once
 
@@ -111,15 +111,26 @@ Trade-off: a Door rendered again (`Reload`, ancestor re-render, remount) comes b
 
 Each mutating method returns `<-chan error` (signatures above); the return value is optional to use:
 
-- success: two `nil` then close — first `nil` = scheduled (render completed), second = applied to the page
-- failure: one error then close; a failed render sends its error (see Render errors); `context.Canceled` = superseded by a newer Door operation, unmount, or lifecycle change
+- first value = scheduled: `nil` (render completed) or an error; a failed render sends its error (see Render errors); `context.Canceled` = superseded by a newer Door operation, unmount, or lifecycle change
+- detached ctx (`DetachedContext`, `InstanceContext`, `doors.Go`, `OnReady`/`OnBatch` callback ctx): second value = applied to the page (`nil`) or an error; then close
+- any other ctx (handler, render, subscription, `OnSettle` callback, `OnSettle`/`OnBatch` `ops`): closes after the first value; applied is not reported
 - closed with no value = Door not mounted when observed; stored state was still updated (affects future renders)
 
-**Do not wait on the channel during rendering.** Wait in a hook, in `doors.Go`, or in a goroutine with `doors.DetachedContext(ctx)` / `doors.InstanceContext(ctx)` (for work that outlives the fragment).
+In most cases, ignore the channel. There is nothing to check: whether an update lands depends on the lifetime of what it targets, and that is managed for you.
+
+**Never wait on the channel during render or in beam subscriptions.** If the result is needed (pacing a fast stream of updates), wait for the second value in a goroutine of your own with `doors.DetachedContext(ctx)`, or in `doors.Go` when the work should follow a rendered subtree; only a detached ctx delivers it (see [context.md](./03-context.md#completion-channels)). To react after updates, use `OnSettle` / `OnBatch` instead (see Lifecycle Hooks).
+
+```go
+go func(ctx context.Context) {
+    ch := door.Inner(ctx, content)
+    <-ch // scheduled
+    if err, ok := <-ch; ok && err == nil { /* on the page */ }
+}(doors.DetachedContext(ctx))
+```
 
 ### doors.Go ordering
 
-`doors.Go(f)` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery — Door updates made inside always land after their host markup. Best-effort like `OnReady`: `f` never runs if the cycle fails or is superseded (inside `Static` content it belongs to the parent, so a failed static render does not drop it). Its ctx is `DetachedContext`-equivalent, canceled when the surrounding content is released (replaced or unmounted); waiting on completion channels inside `f` is safe.
+`doors.Go(f)` starts `f` only after the render cycle producing the surrounding content completes and is enqueued for delivery — Door updates made inside always land after their host markup. Best-effort like `OnReady`: `f` never runs if the cycle fails or is superseded (inside `Static` content it belongs to the parent, so a failed static render does not drop it). Its ctx is detached, canceled when the surrounding content is released (replaced or unmounted); completion channels deliver results inside `f`.
 
 ### Render errors
 
@@ -128,7 +139,7 @@ A marginal case: render functions return errors only if you return one yourself,
 - **Door operation** (`Inner`, `Outer`, `Static`, `Reload`): the error goes to its completion channel. The page keeps the previous content, but it no longer responds — its hooks and subscriptions were released when the operation started. The next successful operation replaces it. After a failed `Outer`, `Inner` fails until a new `Outer` succeeds or the parent renders the Door again; recover with a new `Outer`, not `Reload` (once an `Inner` was issued, `Reload` fails too). A failed `Static` still makes the Door static: later operations only update its stored state.
 - **Door rendered by its parent** (initial page or parent update): left out of the parent's output. Operations on it fail with a placement error until the parent renders it again.
 
-No error marker reaches the page: to observe failures, read the operation's channel or the log. `AData` values are encoded and templ components rendered during the render pass, so an `AData` value that fails to encode or a templ error is a render error too.
+No error marker reaches the page: to observe failures, read the log, or the operation's channel from a goroutine of your own. `AData` values are encoded and templ components rendered during the render pass, so an `AData` value that fails to encode or a templ error is a render error too.
 
 ## Lifecycle
 
@@ -150,18 +161,37 @@ After `Static` or `Unmount`, methods still update stored state — they don't au
 ### Lifecycle Hooks
 
 ```go
-func OnReady(ctx context.Context, on func(ctx context.Context))  // render cycle producing the current content completed (update enqueued for the client)
-func OnSettle(ctx context.Context, on func(ctx context.Context), ops ...func(ctx context.Context)) // current dispatch batch settled
+func OnReady(ctx context.Context, on func(ctx context.Context))  // render cycle producing the current content completed (update enqueued for the client) — on ctx detached
+func OnSettle(ctx context.Context, on func(ctx context.Context), ops ...func(ctx context.Context)) // everything the handler (or ops) started is queued for delivery — on/ops ctx NOT detached
+func OnBatch(ctx context.Context, on func(ctx context.Context), ops ...func(ctx context.Context))  // updates made in ops applied at once; on runs when the browser applied them — on ctx detached, ops ctx not
 func OnClean(ctx context.Context, f func())                      // current content cleared
-func HoldSettle(ctx context.Context) (release func())            // keep the dispatch batch open past handler return
+func HoldSettle(ctx context.Context) (release func())            // keep the handler open for settling past its return
 ```
 
 - `OnReady` — **best-effort, at most once**: never fires if the render fails or is superseded by a newer Door operation. A failed `Static` render is the exception: its content belongs to the parent. Fires promptly if the content is already on the page (e.g. in an event handler).
-- `OnSettle` — **exactly once**: runs `ops` within the current dispatch batch (in a handler the batch spans the whole handler) and fires `on` once everything the batch started — door updates, beam propagation — is processed and enqueued. Fires even on cancel, render failure, or instance shutdown (the provided ctx reports it). Settling is server-side: updates queued, not browser-acknowledged. Practical uses: a reliable point to collect information gathered during render; controlled batched UI updates — the next batch issued from `on` is guaranteed to land after the previous one.
+- `OnSettle` — **exactly once**: runs `ops`, then fires `on` once everything the handler started (in a handler: the whole handler; elsewhere: the `ops` calls) — door updates, beam propagation — is processed and queued for delivery. Fires even on cancel, render failure, or instance shutdown (the provided ctx reports it). Settling is server-side: updates queued, not applied in the browser; tracks the handler's own instance only (updates it triggers in other instances, e.g. other tabs through shared state, are not awaited). Practical uses: a reliable point to act after a multi-step update or to collect information gathered during render. To act once updates are on the page, or to make them land together, use `OnBatch`. Its `on` ctx is not detached: operations made with it stay with the handler's updates and report scheduled only; never block in it.
+- `OnBatch` — **exactly once**, also if the instance ends first (the provided ctx reports it): the updates made in `ops` are applied in the browser at once, and `on` runs when the browser has applied them. Joins the batch of `ctx` if there is one (a handler with `Batch` set, or outer `OnBatch` ops); otherwise opens one spanning `ops`. Where `OnSettle` reports queued for delivery, `OnBatch` reports on the page. `on` gets a detached ctx; `ops` do not.
 - `OnClean` — **exactly once** on every teardown path: Door update (`Inner`/`Outer`/`Reload`), removal (`Static`/`Unmount`), ancestor re-render, render failure (not for `Static` content, which belongs to the parent), instance end. No ctx (the registering ctx is already canceled); capture `InstanceContext(ctx)` beforehand if teardown needs Doors calls. The only ordering guarantee is per piece of content: its `OnClean` runs after its `OnReady` has run or been dropped. The replaced content's `OnClean` is not ordered with the replacing content's render or `OnReady`.
-- `HoldSettle` — keeps the current dispatch batch open after the handler returns until `release()` is called: `OnSettle` callbacks, indicators, scopes, and the client `$hook` promise stay pending. Use it to hand work to another goroutine. Call it synchronously in the handler; always call `release` (idempotent, typically deferred in that goroutine — otherwise the batch settles only at instance end). Operations started with the handler ctx join the batch; `DetachedContext` ones don't. Outside a batch, `release` is a no-op.
-- Callbacks run inline on the framework goroutine firing the frame (or the calling goroutine when it already fired); `OnReady`/`OnSettle` receive a `DetachedContext`-equivalent ctx. Never block in them.
+- `HoldSettle` — keeps the handler open after it returns until `release()` is called: `OnSettle` callbacks, indicators, scopes, and the client `$hook` promise stay pending; with `Batch` set, the updates stay unapplied until release. Use it to hand work to another goroutine. Call it synchronously in the handler; always call `release` (idempotent, typically deferred in that goroutine — otherwise the handler settles only at instance end). Operations started with the handler ctx join it; `DetachedContext` ones don't — a goroutine that outlives the handler without `HoldSettle` uses `doors.DetachedContext(ctx)`. Outside a handler, `release` is a no-op.
+- Callbacks run inline on the framework goroutine that fires them (or the calling goroutine when the condition already holds); `OnReady` and `OnBatch` `on` receive a detached ctx; `OnSettle` `on` and all `ops` do not. Never block in them.
 - Acquire in render code, release in `OnClean`; never tie cleanup to `OnReady`. All panic if ctx is not a Doors ctx.
+
+```go
+doors.OnBatch(ctx, func(ctx context.Context) {
+    p.status.Inner(ctx, "Saved")
+}, func(ctx context.Context) {
+    p.form.Inner(ctx, OrderForm{order: order})
+    p.list.Inner(ctx, OrderList{status: status})
+})
+```
+
+```go
+release := doors.HoldSettle(ctx)
+go func() {
+    defer release()
+    // operations started with the handler ctx join the handler
+}()
+```
 
 ```gox
 <>
@@ -183,6 +213,7 @@ func HoldSettle(ctx context.Context) (release func())            // keep the dis
 | `doors.IsDocument` + `doors.DeferredInner` | Loader: slow content complete in the page response, behind a placeholder on later renders |
 | `Reload` | Redraw current content (depends on external state) |
 | `Unmount` | Remove now, keep for reuse later |
+| `doors.OnBatch` | Several Doors change in one step; act once they are on the page |
 | `doors.Once(v)` | Don't keep rendered content in Door memory |
 | `Static` chain | Page accumulates items (feeds, logs, chats, streams); server keeps only the growth edge |
 
@@ -286,7 +317,7 @@ Notes for growing content:
 
 - The edge's position sets the direction: edge after the item grows down (append), edge before it grows up (prepend).
 - For items that stay dynamic for a while (streamed output, edit-in-place), mount the dynamic part through its own Door and call `Static` on that Door with the final content when done. Keep the final content free of hooks and subscriptions: static content registers them on the parent, where they live as long as the feed does.
-- To pace a fast producer, read the completion channel `Static` returns before the next append.
+- To pace a fast producer, read the completion channel `Static` returns before the next append — in the producer's own goroutine (`doors.DetachedContext(ctx)`), never in render or a subscription; read both values, the second one means on the page.
 - Inside tag-restricted parents (`<table>`, `<select>`) the generated `d0-r` container is foster-parented out by the browser — give each new edge a real tag first: `next.Outer(ctx, <tr></tr>)`.
 
 ### Collections of Doors
@@ -298,5 +329,5 @@ Pair with explicit state subscriptions (`Sub`, `ReadAndSub`) for maximum control
 ## Related
 
 - [state.md](./06-state.md) — `Bind`, `Effect` (built on Door)
-- [events.md](./09-events.md) — Handler-triggered Door updates
+- [events.md](./09-events.md) — Handler-triggered Door updates, `Batch`
 - [components.md](./08-components.md) — Component lifecycle and rendering strategies

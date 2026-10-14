@@ -44,7 +44,7 @@ type Conf struct {
     SolitaireFrameSize              int           // max frame buffer bytes before flush (default 32 KB)
     SolitaireDisableGzip            bool          // no gzip for door updates and action payloads
     SolitaireQueue                  int           // max updates awaiting delivery or ack; exceeding ends instance (default 1024)
-    SolitairePending                int           // max delivered-but-unacked updates; at limit sending pauses (default 256)
+    SolitairePending                int           // max delivered-but-unacked updates; at limit sending pauses (default 256); also bounds the calls batches hold in the browser, at the limit the oldest batch is applied early
     SolitaireDisableReportStreaming bool          // browser posts each message separately (auto fallback outside HTTP/2/3)
     SolitaireReportLimit            int           // max browser message size (default 8 MB)
     SolitaireReportTimeout          time.Duration // max time to receive one message (default min(5s, RollTime))

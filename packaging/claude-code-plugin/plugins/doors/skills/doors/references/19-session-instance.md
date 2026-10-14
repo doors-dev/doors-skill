@@ -18,7 +18,7 @@ func IDNumber(ctx context.Context) uint64                  // instance-unique no
 func Logger(ctx context.Context) *slog.Logger              // Doors logger; slog.Default without session; any ctx
 func SessionContext(ctx context.Context) context.Context   // context canceled on session end
 func InstanceContext(ctx context.Context) context.Context  // context for instance-scoped goroutines
-func DetachedContext(ctx context.Context) context.Context  // context detached from render frame
+func DetachedContext(ctx context.Context) context.Context  // detached context: own goroutines, delivers completion results
 ```
 
 ## Lifecycle
@@ -59,7 +59,7 @@ Internal Doors session cookie: `HttpOnly`, `Secure`, scoped to `/`, named from `
 | `HasSession` / `HasInstance` | Check which Doors API level a context supports before calling |
 | `SessionContext` | Session-scoped goroutines, shared helpers, Door handle methods, Source/Beam mutations, reads, and subscriptions (subs end with the session) |
 | `InstanceContext` | Work outliving current dynamic owner, bounded by page |
-| `DetachedContext` | Work keeping current dynamic ownership |
+| `DetachedContext` | Own goroutines keeping current ownership; waiting on completion channels |
 
 ## Session vs Instance Store
 
