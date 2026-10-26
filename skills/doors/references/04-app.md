@@ -97,6 +97,8 @@ Middleware runs in registration order (first registered = outermost). Non-short-
 
 The request context in middleware carries `SessionContext` values (session-level, not instance-level). See [context.md](./03-context.md) for API compatibility. This is useful for auth bootstrapping — reading cookies and populating `SessionStore` before the handler runs. First touch of a session API is what creates the session.
 
+`WithValue` app values are on the middleware request ctx too; a value middleware sets for the same key wins on `r.Context()`.
+
 ## Options
 
 ```go
@@ -111,6 +113,8 @@ func WithSessionTracker(t SessionTracker) With // Observe session create/delete;
 func WithErrorPage(ep ErrorPage) With          // Custom error page renderer
 func WithESProfiles(f func(string) api.BuildOptions) With // esbuild profiles
 func WithPrinter(p func(next gox.Printer) gox.Printer) With // Wrap the gox.Printer Doors uses to emit HTML
+func WithValue(key, value any) With            // App-wide ctx value (DB pool, client) in every Doors ctx; see 21-configuration.md Context Values
+func WithFunc(f func() With) With              // Build an option once per app inside NewApp
 ```
 
 `ESProfile{...}` also implements `With`.

@@ -84,7 +84,7 @@ doors.ResourceExternal("https://cdn.example.com/app.css") // direct external URL
 
 Shorthand: `href=(appCSS)` where `appCSS` is `[]byte` is equivalent to `href=(doors.ResourceBytes(appCSS))`. Same for handler functions.
 
-For full resource behavior (caching, content type, name, private/nocache), see [resources.md](./14-resources.md).
+For full resource behavior (caching, content type, name, private/nocache/portable), see [resources.md](./14-resources.md).
 
 ### Attrs
 
@@ -94,8 +94,9 @@ For full resource behavior (caching, content type, name, private/nocache), see [
 | `name="..."` | Readable output filename |
 | `private` | Instance-scoped URL |
 | `nocache` | No shared resource caching (for dynamically generated styles) |
+| `portable` | Hook URL with its own access, loads without the session cookie; acts as `private` unless `nocache`; not with `cache` |
 
-`name`, `private`, and `nocache` also work on managed `<style>...</style>` tags; `raw` keeps the literal style tag instead of turning it into a stylesheet resource.
+`name`, `private`, `nocache`, and `portable` also work on managed `<style>...</style>` tags; `raw` keeps the literal style tag instead of turning it into a stylesheet resource.
 
 ## Framework CSS
 

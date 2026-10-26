@@ -150,7 +150,7 @@ Use `Watch` when you need to cancel the subscription explicitly — it returns a
 
 ### SessionContext API compatibility
 
-`SessionContext` carries the session and nothing else — user context values are dropped, and instance-scoped APIs panic:
+`SessionContext` carries the session and app values (`WithValue`) — other user context values are dropped, and instance-scoped APIs panic:
 
 | ✅ OK | ❌ NOT OK |
 |-------|-----------|

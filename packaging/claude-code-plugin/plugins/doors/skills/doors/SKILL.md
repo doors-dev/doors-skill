@@ -3,7 +3,7 @@ name: doors
 description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Always read the bundled Doors-specific GoX reference first. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, GoX, and framework-specific conventions.
 license: Apache-2.0
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   language: go
 ---
 
@@ -35,10 +35,11 @@ Ask the user only for product requirements that cannot be inferred from the code
 
 ## Core Mental Model
 - Each interactive page is a live server-side instance. There is no virtual DOM.
-- Components are static by default: `Main()` renders once and stays. Re-rendering is explicit and targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`, `Deferred*`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
+- Two ways to update a page after the first render. Data-driven covers most of an app: a part shows a piece of data (URL, UI state, user status and settings, live metrics/progress/presence) and its content is swapped when the data changes; handlers change state, each part shows what follows from it, and the page always matches the state. Explicit is an operation, not a new value: append, prepend, insert, remove, for virtual/managed lists, growing content (chats, logs, streamed text), and real-time loops; it gives precise control at the cost of more code, since you track what is on the page and keep it in step yourself.
+- Components are static by default: `Main()` renders once and stays. Updates are targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`, `Deferred*`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
 - State derivation replaces virtual DOM diffing. For all reactive state, use a ladder: branch key owned at that level (often derived), narrower branches, then field/param/query binds only in consuming fragments.
 - `Route` swaps only when the matched branch changes (a `RouteBind` leaf rerenders on value change); `Bind`/`Effect` rerender on subscribed value changes, so derive before binding.
-- Browser events call server handlers bound to the live page instance. If a subtree disappears, hooks and dynamic bindings inside it disappear too.
+- A hook is a server HTTP handler created during render. It lives as long as the Door that encloses it and answers only the session that rendered it. Event handlers, private resources, and custom endpoints (`NewHook`) are all hooks.
 - Lifecycle hooks tie work to render delivery: `OnReady` (content enqueued for the client), `OnClean` (content cleared), `OnSettle` (everything the handler started is queued for delivery), `OnBatch` (a group of updates applied in the browser at once), `HoldSettle` (keep indicators, scopes, and the `$hook` promise pending until released).
 - A session is shared across browser pages/tabs. An instance is one live page with its own render tree, handlers, subscriptions, and lifecycle. Sessions are created lazily on first actual touch of a session API.
 
@@ -86,6 +87,7 @@ After `references/00-gox.md`, read remaining references by task, not all at once
 | Control request scheduling: prevent double-clicks, rate-limit, debounce, queue, cancel stale | `references/11-scopes.md` |
 | Run browser-side actions before/after/on-error, emit JS events, scroll, read the client clock, or hard navigate | `references/13-actions.md` |
 | Serve images, downloads, embedded files, or external URLs | `references/14-resources.md` |
+| Give browser code its own HTTP endpoint (island API, `EventSource`, `WebSocket`, third-party widget) with `NewHook` | `references/14-resources.md` (Custom Endpoints), `references/15-javascript.md` |
 | Add inline scripts, managed scripts, JS modules, Go-to-JS data, or JS-to-Go hooks | `references/15-javascript.md` |
 | Add stylesheets, Tailwind classes, inline styles, or class composition | `references/16-styles.md` |
 | Element handles: sync attributes across elements (`Setter`) or dispatch synthetic DOM events from the server (`Emitter`) | `references/17-element-handles.md`, `references/09-events.md`, `references/13-actions.md` |
@@ -125,7 +127,7 @@ Sessions are lazy: the cookie is set immediately, but session state is allocated
 - To react after updates use callbacks: `doors.OnSettle` (updates queued for delivery), `doors.OnBatch` (applied in the browser). `OnReady`/`OnBatch` callbacks get a detached ctx; `OnSettle`'s does not and must not block. Use `doors.OnReady` to start work that must not outrun the markup it targets, `doors.OnClean` for teardown when content is cleared, and `doors.HoldSettle` when a handler hands work to another goroutine but indicators, scopes, and the `$hook` promise must stay pending until it finishes.
 - Use `doors.Parallel()` only for independent slow render fragments. Do not put it in front of `Bind`, `Effect`, `Route`, or `doors.Door` rendering; dynamic containers already render on the instance goroutine pool.
 - Use `doors.Go(f)` for background work scoped to a rendered subtree's lifetime; `f` starts only after the surrounding render cycle is enqueued for delivery, so its Door updates land after the host markup.
-- Treat dynamic subtrees as runtime-managed. Direct DOM work is possible but should complement the runtime, not race against it.
+- Doors renders dynamic parts into containers it manages. Scripts may set attributes, classes, and styles, show and hide elements, and mount JS islands (e.g. a React app). Never move or remove the dynamic containers themselves: Doors updates them in place and expects to find them where it rendered them.
 - Do not return errors from render code: render loading failures, missing data, and other error states as content. A failed render sends nothing to the browser, leaves the previous content on the page but detached, and is only logged as `door rendering error`; see `references/07-door.md`.
 
 ### Routing
@@ -158,7 +160,9 @@ Handlers receive their own `ctx`; use that handler context inside handlers.
 
 Use the Doors-provided context for state reads/updates, hooks, links, session/instance APIs, subscriptions, lifecycle-bound work, and Door updates. Use `r.Context()` only for ordinary HTTP/request work.
 
-User `context.WithValue` values do not flow into a render subtree automatically; wrap content with the `doors.Ctx(ctx)` proxy to propagate them to nested renders, event handlers, and later door updates. `SessionContext` drops user values.
+For app-wide dependencies (DB pool, config, service client) use `doors.NewApp(page, doors.WithValue(key, v))`: `ctx.Value(key)` works in every Doors ctx (page factory, render, handlers, `DetachedContext`/`InstanceContext`/`SessionContext`, `r.Context()`, the hook/resource `*http.Request`). Use an unexported key and a typed helper.
+
+User `context.WithValue` values do not flow into a render subtree automatically; wrap content with the `doors.Ctx(ctx)` proxy to propagate them to nested renders, event handlers, and later door updates. `SessionContext` drops user values but keeps `WithValue` app values.
 
 `doors.HasSession`/`doors.HasInstance` report what a context supports; `doors.IsDocument` reports whether it renders into the page response; `doors.SessionID`/`doors.InstanceID` (note the ID casing) return identifiers; `doors.Logger(ctx)` returns the configured logger; `doors.IDNumber(ctx)` returns an instance-unique `uint64`.
 
@@ -215,7 +219,7 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 - `references/11-scopes.md` - blocking, serial, debounce, latest, frame, concurrent, sharing, pipelines
 - `references/12-indication.md` - indicators, selectors, combining, `ActionIndicate`
 - `references/13-actions.md` - `Call`, `Into`, `ActionEmit[T]`, `ActionScroll`, `ActionIndicate`, `ActionTime`, location actions, `ErrExecution`/`ErrTerminated`/`ErrPathModel`/`ErrPathEncode` sentinels
-- `references/14-resources.md` - `ResourceFS`, `ResourceBytes`, resource attrs, cache/type/name, external resources
+- `references/14-resources.md` - `ResourceFS`, `ResourceBytes`, resource attrs, cache/type/name/portable, `NewResource` URL in code, external resources
 - `references/15-javascript.md` - managed scripts, `AHook`, `$hook`, `$data`, `$on`, emit timing, modules, esbuild
 - `references/16-styles.md` - class helper, stylesheet resources, raw/private styles, framework CSS (`d0-r` via constructed stylesheet, no `doors.css`)
 - `references/17-element-handles.md` - element handles: `Setter` (attributes), `Emitter` (synthetic events), value semantics, removed `AShared`

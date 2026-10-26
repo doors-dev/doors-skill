@@ -75,7 +75,7 @@ Internal Doors session cookie: `HttpOnly`, `Secure`, scoped to `/`, named from `
 - `SessionEnd` affects all tabs immediately
 - `InstanceEnd` leaves other tabs untouched
 - Use `SessionID`/`InstanceID` for diagnostics only, not business identifiers
-- `SessionContext` drops user ctx values; `InstanceContext`/`DetachedContext` keep them
+- `SessionContext` drops user ctx values except app values (`WithValue`); `InstanceContext`/`DetachedContext` keep them
 - Top-level `doors.Reload`, `doors.DeferredInner`/`DeferredOuter`/`DeferredStatic` and instance APIs panic on `SessionContext`; Door handle methods accept it
 
 ## Related

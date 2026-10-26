@@ -14,6 +14,8 @@ func WithSessionTracker(t SessionTracker) With           // observe session crea
 func WithErrorPage(ep ErrorPage) With                    // custom error page
 func WithESProfiles(f func(string) api.BuildOptions) With // esbuild profiles
 func WithPrinter(p func(next gox.Printer) gox.Printer) With // wrap the HTML output printer
+func WithValue(key, value any) With                      // ctx.Value(key) in every Doors ctx and request
+func WithFunc(f func() With) With                        // build an option once per app, in NewApp
 ```
 
 `ESProfile{...}` also implements `With`.
@@ -151,7 +153,29 @@ doors.WithErrorPage(func(r *http.Request, err error) gox.Elem {
 
 ## Printer Middleware
 
-`WithPrinter(func(next gox.Printer) gox.Printer)` wraps the printer Doors serializes render jobs through — for stamping attributes, render metrics, output auditing. Nil disables wrapping.
+`WithPrinter(func(next gox.Printer) gox.Printer)` wraps the printer Doors serializes render jobs through — for stripping unwanted attributes, render metrics, output auditing. Nil disables wrapping.
+
+```go
+type stripHandlers struct {
+    next gox.Printer
+}
+
+func (s stripHandlers) Send(j gox.Job) error {
+    if open, ok := j.(*gox.JobOpen); ok && open.Attrs != nil {
+        for _, attr := range open.Attrs.List() {
+            name := attr.Name()
+            if attr.IsSet() && len(name) > 2 && strings.EqualFold(name[:2], "on") {
+                attr.Unset()
+            }
+        }
+    }
+    return s.next.Send(j)
+}
+
+app := doors.NewApp(page, doors.WithPrinter(func(next gox.Printer) gox.Printer {
+    return stripHandlers{next: next}
+}))
+```
 
 Contract:
 
@@ -162,6 +186,29 @@ Contract:
 - `gox.JobOpen` attrs are mutable until serialized; may be nil on no-output container heads.
 - Do not modify `d0*` elements/attributes or rewritten resource URLs; do not inject head-relevant elements before the document head; do not block (render hot path).
 - Not wrapped: `WithErrorPage` output, static files/resources.
+
+## Context Values
+
+```go
+type dbKey struct{}
+
+func DB(ctx context.Context) *sql.DB { return ctx.Value(dbKey{}).(*sql.DB) }
+
+app := doors.NewApp(page, doors.WithValue(dbKey{}, db))
+```
+
+- Unexported key + typed helper.
+- Seen in the page factory, renders, handlers, `DetachedContext`, `InstanceContext`, `SessionContext`, `r.Context()`, and the hook/resource `*http.Request`.
+- Same key set inside Doors (`context.WithValue` on a Doors ctx, `doors.Ctx`) wins; same key set by `app.Use` middleware wins on `r.Context()`. Repeated key: last wins. nil/non-comparable key panics in `NewApp`.
+- `WithFunc(f)`: f runs once per `NewApp` and its option is applied, so one option shared by several apps gives each app its own value. nil f or nil result: no-op.
+
+```go
+func withCache() doors.With {
+    return doors.WithFunc(func() doors.With {
+        return doors.WithValue(cacheKey{}, newCache())
+    })
+}
+```
 
 ## Session Tracker
 

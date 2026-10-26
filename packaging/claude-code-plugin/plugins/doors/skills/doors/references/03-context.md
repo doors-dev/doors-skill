@@ -61,7 +61,9 @@ Renders the following element with the **values** of `ctx` — propagates user `
 </>
 ```
 
-Value survival across derived contexts: `InstanceContext` and `DetachedContext` keep user values; `SessionContext` drops them.
+For values every page needs (DB, clients), use app-level `doors.WithValue` instead; a `doors.Ctx` / `context.WithValue` value for the same key wins over it.
+
+Value survival across derived contexts: `InstanceContext` and `DetachedContext` keep user values; `SessionContext` drops them except app values (`WithValue`).
 
 ## Predicates & Utilities
 
@@ -87,7 +89,7 @@ func IDNumber(ctx context.Context) uint64   // instance-unique, non-sequential n
 func SessionContext(ctx context.Context) context.Context
 ```
 
-Returns a context canceled when the current **session** ends. Carries the session and nothing else: user ctx values are dropped; not tied to any instance or dynamic owner.
+Returns a context canceled when the current **session** ends. Carries the session and app values (`WithValue`); other user ctx values are dropped; not tied to any instance or dynamic owner.
 
 **OK with SessionContext:**
 

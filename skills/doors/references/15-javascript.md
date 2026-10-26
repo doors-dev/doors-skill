@@ -28,7 +28,8 @@ The TypeScript language server does not know about Doors post-processing — it 
     profile="react"           // named esbuild profile
     name="app.js"             // readable output filename
     private                   // instance-scoped URL (not publicly reachable)
-    nocache>                  // no shared resource caching (for dynamically generated scripts)
+    nocache                   // no shared resource caching (for dynamically generated scripts)
+    portable>                 // hook URL with its own access, loads without session cookie; acts as private unless nocache; not with cache
 </script>
 ```
 
@@ -45,7 +46,7 @@ Auto-wrapped with:
 - `$sys.emit(target, event)` — dispatch a DOM event from JS and await every hook request it triggers (including `HoldSettle` and `After` actions); resolves to the number of hook requests, rejects with `HookErr` on any failure (hooks canceled by a scope or by `RaceStrict`, or `Key`-filtered, count as failures). Client counterpart of `doors.Emitter`. Build the event yourself (`new PointerEvent("click", {bubbles: true})`); safe at script top level.
 - top-level `await`
 
-Auto-detected request body: `undefined`→no body, `FormData`→multipart, `URLSearchParams`→form-urlencoded, `Blob`→raw blob body, `File`→raw file body, `ReadableStream`→`application/octet-stream`, `ArrayBuffer`/typed arrays→`application/octet-stream`, anything else→JSON.
+Auto-detected request body: `undefined`→no body (`$fetch` only; `$hook(name)` without an argument sends `null`), `FormData`→multipart, `URLSearchParams`→form-urlencoded, `Blob`→raw blob body, `File`→raw file body, `ReadableStream`→`application/octet-stream`, `ArrayBuffer`/typed arrays→`application/octet-stream`, anything else→JSON.
 
 ## Data Binding (Go→JS)
 
@@ -148,7 +149,9 @@ const resp   = await $fetch("upload", formData)    // raw Response
 
 Manual `$hook(...)` and `$fetch(...)` calls throw `HookErr`. Catch it when failure is part of the normal flow.
 
-Request body auto-detected: `undefined` (no body), `FormData` (multipart), `URLSearchParams` (form), `Blob` (raw blob body), `File` (raw file body), `ReadableStream` (octet stream), `ArrayBuffer`/typed arrays (octet stream), other (JSON).
+Request body auto-detected: `undefined` (no body; `$fetch` only, `$hook(name)` without an argument sends `null`), `FormData` (multipart), `URLSearchParams` (form), `Blob` (raw blob body), `File` (raw file body), `ReadableStream` (octet stream), `ArrayBuffer`/typed arrays (octet stream), other (JSON).
+
+`$hook`/`AHook` enhance page logic (drag-and-drop, scroll sync) and keep Doors scopes, indication, and errors. When the client brings its own code and speaks plain HTTP (React island API, third-party widget, `EventSource`, `WebSocket`, fetch uploads/downloads with progress, web workers), pass a `doors.NewHook` URL via `data:` instead; see `14-resources.md` Custom Endpoints. For static files loaded by URL, use `doors.NewResource`.
 
 ### $on (for ActionEmit)
 
