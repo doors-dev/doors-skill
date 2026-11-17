@@ -34,13 +34,14 @@ Suffix on each helper:
 | `Query(q)` | First CSS match |
 | `QueryAll(q)` | All CSS matches |
 | `QueryParent(q)` | Closest matching ancestor |
+| `Submitter` | Button that submitted the form (submit events only; click, Enter in a field, or emitted click). Nothing otherwise, or for `form.requestSubmit()` without a submitter |
 
 ```go
 doors.IndicateAttrQuery("#loader", "aria-busy", "true")
 doors.IndicateClassQueryAll(".row", "pending")
 ```
 
-Target and parent selectors need an event element and select nothing without one — for `AHook`/`ARawHook` calls and `ActionIndicate` outside event attr or `ALink` action lists, only the `Query`/`QueryAll` variants apply.
+Target, parent and submitter selectors need an event element and select nothing without one — for `AHook`/`ARawHook` calls and `ActionIndicate` outside event attr or `ALink` action lists, only the `Query`/`QueryAll` variants apply.
 
 ## Struct Form
 
@@ -61,6 +62,7 @@ Indicator: doors.JoinIndicators(
 
 ```go
 func SelectorTarget() Selector            // event element
+func SelectorSubmitter() Selector         // button that submitted the form
 func SelectorQuery(q string) Selector     // first match
 func SelectorQueryAll(q string) Selector  // all matches
 func SelectorQueryParent(q string) Selector // closest ancestor match

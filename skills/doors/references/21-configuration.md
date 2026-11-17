@@ -20,6 +20,8 @@ func WithFunc(f func() With) With                        // build an option once
 
 `ESProfile{...}` also implements `With`.
 
+`doors.AppConf(ctx) Conf` returns a copy of the app's `Conf` with defaults filled in; panics without a Doors session (`HasSession(ctx)` to check).
+
 ## Conf fields
 
 ```go

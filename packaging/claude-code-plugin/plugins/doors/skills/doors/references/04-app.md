@@ -81,11 +81,20 @@ app.Use(doors.UseFS("/static", assets.Static(), doors.CacheControlStatic))
 
 ### Resource at Fixed Path
 
+`UseResource(path string, r CacheableResource) Use` — built and cached once, served from RAM (gzipped unless `ServerDisableGzip`) with `ServerCacheControl`:
+
 ```go
-app.Use(doors.UseResource("/assets/font.woff2", doors.ResourceFS(fsys, "font.woff2"), "font/woff2"))
+app.Use(
+    doors.UseResource("/assets/font.v2.woff2", doors.ResourceFS(fsys, "font.woff2").ContentType("font/woff2").Cache()),
+    doors.UseResource("/embed/widget.v3.js", doors.ResourceFS(web, "widget.ts").Script().Bundle()),
+)
 ```
 
-An empty `contentType` leaves the Content-Type header unset.
+- Plain assets need `.ContentType(t).Cache()`; scripts/styles (`.Script()`, `.Style()`, `.Raw()`) are built like their tags and already cacheable
+- Version the path: `ServerCacheControl` defaults to `public, max-age=31536000, immutable`, so changed content at the same path stays stale in browsers
+- Exact path match; panics on `""`, `"/"`, or a non-static resource
+
+Migration: `UseResource(p, r, t)` → `UseResource(p, r.ContentType(t).Cache())`.
 
 ### Custom Middleware
 

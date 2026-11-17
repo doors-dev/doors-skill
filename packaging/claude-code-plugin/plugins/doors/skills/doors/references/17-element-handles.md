@@ -60,7 +60,7 @@ One call disables both buttons. `Set("disabled", nil)` removes the attribute aga
 type Emitter struct{}
 ```
 
-Zero-value attribute handle. Each event method returns `ActionInto[int]` dispatching a real DOM event — bubbles, cancelable — so event attrs on the element **and its ancestors** run, and plain JS listeners see it too.
+Zero-value attribute handle. Each event method returns `ActionInto[EmitReport]` dispatching a real DOM event — bubbles, cancelable — so event attrs on the element **and its ancestors** run, and plain JS listeners see it too.
 
 | Methods | Init struct |
 | --- | --- |
@@ -80,7 +80,19 @@ Init structs carry only round-trip fields; unset fields use browser defaults:
 - `ChangeEmit`: empty — values read from the event target, attach the emitter to the input/select
 - `SubmitEmit`: empty — form data read from the event target, attach the emitter to the form
 
-`Into(&count)` captures the number of **hook requests** triggered, not elements reached: an attached element with no matching event attr adds nothing, a bubbling event adds one per event attr it reaches. Any failure among them fails the call. The action completes only after every triggered hook request has finished, so by the time its channel delivers the result (the second value, detached ctx only), the handlers have run. To wait for it, see [actions.md](./13-actions.md#call-results).
+`Into(&report)` captures a `doors.EmitReport` of the **hook requests** triggered, not elements reached:
+
+```go
+type EmitReport struct {
+    OK       int     // completed
+    Canceled int     // canceled by a scope, race mode, or ExactTarget/Key filter
+    Failed   []error // one per failed hook request, e.g. "bad_request: ..."
+}
+```
+
+An attached element with no matching event attr adds nothing, a bubbling event adds one per event attr it reaches, and hooks of events the emitted event triggers (such as the form submit after a click on a submit button) are included. A failed or canceled hook request does not fail the call. The action completes only after every triggered hook request has finished, so by the time its channel delivers the result (the second value, detached ctx only), the handlers have run. To wait for it, see [actions.md](./13-actions.md#call-results).
+
+The call fails when the emitter has no attached elements. Disabled targets: if any attached element is `:disabled` (incl. inside a disabled `<fieldset>`) or inside an `inert` subtree, nothing is dispatched to any element and the call fails with `ErrExecution` (`canceled: target is disabled`). `aria-disabled` is not checked.
 
 Event attrs accept nil `On` (request accepted, body discarded, hook stays) — an attr can exist purely as an Emitter round-trip target or for client-side effects.
 
@@ -117,7 +129,7 @@ var field doors.Emitter
 - Synthetic DOM events from server → `Emitter`
 - Richer DOM work → `ActionEmit` + `$on(...)`
 - UI state change → normal rendering/state
-- `Into` units: `Setter` = live elements, `Emitter` = hook requests
+- `Into` results: `Setter` = live element count, `Emitter` = `EmitReport` of hook requests
 - Same from JS → `$sys.emit(target, event)` (see `15-javascript.md`)
 
 ## Removed: AShared

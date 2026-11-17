@@ -22,7 +22,7 @@ type Scopes interface {
 }
 ```
 
-`ScopeBlocking`, `ScopeSerial`, `ScopeRate`, `ScopeDebounce`, and `ScopeLatest` implement `Scopes` directly. `ScopeFrame` and `ScopeConcurrent` are factories; call `.Scope(...)` to get a `Scopes` value. Combine scopes with `.And(...)` or `JoinScopes(...)`.
+`ScopeBlocking`, `ScopeSerial`, `ScopeRate`, `ScopeDebounce`, and `ScopeLatest` implement `Scopes` directly. `ScopeFrame`, `ScopeCheckpoint`, and `ScopeConcurrent` are factories; call `.Scope(...)` to get a `Scopes` value. Combine scopes with `.And(...)` or `JoinScopes(...)`.
 
 ## Scope Types
 
@@ -78,7 +78,7 @@ Cancel previous in-flight work, keep only newest. Unlike debounce, replaces work
 scope := &doors.ScopeLatest{}
 ```
 
-Cancellation is client-side. The previous request may already have reached the server, so do not rely on `ScopeLatest` to protect writes; use it to end stale indication, ignore stale results, and keep the newest interaction in control of the UI. To keep an older call from running after a newer one on the backend, also set `Race: doors.RaceStrict` on the attr (see `Race` in `09-events.md`).
+Cancellation is client-side. The previous request may already have reached the server, so do not rely on `ScopeLatest` to protect writes; use it to end stale indication, ignore stale results, and keep the newest interaction in control of the UI. To keep an older call from running after a newer one on the backend, also set `Race: doors.RaceStrict` or `doors.RaceLatest` on the attr (see `Race` in `09-events.md`).
 
 ### ScopeFrame
 
@@ -91,6 +91,24 @@ frame.Scope(true)  // barrier — waits for running events, then runs alone
 ```
 
 A barrier waits for the events already running in the scope, then runs while every new event in the scope — ordinary or another barrier — is rejected.
+
+### ScopeCheckpoint
+
+Let one event wait until related work settles, without stopping that work.
+
+```go
+cp := &doors.ScopeCheckpoint{}
+cp.Scope(false) // ordinary — always runs immediately
+cp.Scope(true)  // checkpoint — runs once earlier checkpoints are done and no ordinary event is in flight
+```
+
+An ordinary event arriving while a checkpoint waits holds it further; one arriving while it runs does not affect it. Checkpoints queue in arrival order. Requests outside the scope are not waited for. Nothing is rejected, so nonstop ordinary traffic (continuous typing) keeps a checkpoint waiting until it pauses. Typical: inputs autosave as you type (ordinary), `Submit` (checkpoint) waits until autosaves settle, including keystrokes typed while it waits.
+
+"In flight" is client-side. A request stays in flight until its `After` actions finish, and a cancel releases it only before its result starts being applied. A request that times out, is canceled before then (e.g. by `ScopeLatest`), or fails stops holding the checkpoint, even if its handler still runs on the server or the save failed.
+
+Scopes after `cp.Scope(true)` are part of its run. To drop double clicks, put blocking first: `block.And(cp.Scope(true))`; `cp.Scope(true).And(block)` queues the second click instead.
+
+Put the checkpoint scope first in the chain: `cp.Scope(false).And(debounce)`. With `debounce.And(cp.Scope(false))`, a keystroke still held by the debounce has not joined the checkpoint scope yet, so `Submit` does not wait for it.
 
 ### ScopeConcurrent
 
@@ -137,9 +155,10 @@ Each scope sees the event only after the previous accepted it.
 - A rejected or replaced request is never sent — its handler does not run and its indication does not start
 - A scope stays occupied while its request is pending; `doors.HoldSettle(ctx)` in the handler keeps it (and the indicator) pending until release
 - Pair with indication for polished UX
+- Chains sharing scopes must list the shared scopes in the same order; opposite orders (`a.And(b)` on one control, `b.And(a)` on another) can deadlock, like locks taken in different orders
 - `ScopeBlocking` is the simplest "prevent double-submit"
 - `ScopeRate` throttles events to a fixed minimum interval; first fires immediately, cooldown is not reset by new arrivals
-- `ScopeLatest` cancels in-flight indication and client-side work, but the request may already have been sent and will reach the server regardless; pair it with `Race: doors.RaceStrict` when an older call must not run after a newer one
+- `ScopeLatest` cancels in-flight indication and client-side work, but the request may already have been sent and will reach the server regardless; pair it with `Race: doors.RaceStrict` or `doors.RaceLatest` when an older call must not run after a newer one
 
 ## Related
 

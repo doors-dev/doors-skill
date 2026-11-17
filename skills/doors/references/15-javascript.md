@@ -2,7 +2,7 @@
 
 Script resources + Go↔JS bridge (`AHook`, `$hook`, `$data`, `$on`).
 
-The main pattern: embed a separate CommonJS `.ts` file as a managed script using `src=(resource)` with `type="typescript" inline`. It is essentially an inline script stored in a separate file — it gets auto-wrapped with framework APIs and cannot be bundled.
+The main pattern: embed a separate CommonJS `.ts` file as a managed script using the `(resource)` modifier with `type="typescript" inline`. It is essentially an inline script stored in a separate file — it gets auto-wrapped with framework APIs and cannot be bundled.
 
 The TypeScript language server does not know about Doors post-processing — it will show errors for top-level `await` and Doors APIs like `$hook`, `$data`, etc. This is expected and not an issue at runtime.
 
@@ -11,15 +11,15 @@ The TypeScript language server does not know about Doors post-processing — it 
 | Shape | How | Runtime |
 |-------|-----|---------|
 | **Managed inline** | Plain `<script>...</script>` with no `src`/`raw`/non-JS `type` | Gets `$data`, `$hook`, `$fetch`, `$on`, `$sys`, top-level `await` |
-| **Managed src** | `<script src=(resource) inline>` | Same as managed inline |
-| **Plain linked** | `<script src=(resource)>` | Built through JS pipeline |
-| **Module** | `<script src=(resource) type="module" bundle>` | ES module with bundling |
+| **Managed src** | `<script (resource) inline>` | Same as managed inline |
+| **Plain linked** | `<script (resource)>` | Built through JS pipeline |
+| **Module** | `<script (resource) type="module" bundle>` | ES module with bundling |
 | **Raw** | `raw` attr on any script | Browser loads as-is |
 
 ## Script Attrs
 
 ```gox
-<script src=(resource)
+<script (resource)
     type="typescript"   // JS (omit), module, typescript, module/typescript
     inline                    // wraps resource content with Doors API for inline usage
     bundle                    // bundle dependencies
@@ -33,6 +33,12 @@ The TypeScript language server does not know about Doors post-processing — it 
 </script>
 ```
 
+Chain equivalents (`ScriptResource`, see `14-resources.md` Two Syntaxes): `type="module"` → `.Module()`, `type="typescript"` → `.TypeScript()`, `bundle` → `.Bundle()`, `raw` → `.Raw()`, `profile` → `.Profile(p)`, `name` → `.Name(n)`, `private`/`nocache`/`portable` → `.Private()`/`.NoCache()`/`.Portable()`. `inline` and `specifier` stay attributes:
+```gox
+<script (doors.ResourceFS(web, "app.ts").Script().Module().Bundle()) specifier="app"></script>  ~// gets type="module"
+```
+A `.ContentType(...)` stage or a `.Style()` stage on `<script>` is a render error.
+
 ## Managed Scripts
 
 Auto-wrapped with:
@@ -43,7 +49,7 @@ Auto-wrapped with:
 - `$sys.ready()` — promise that resolves when the page is loaded and runtime initialized. All framework APIs (`$data`, `$hook`, `$fetch`, `$on`) already wait for readiness internally, so this is only needed for non-framework operations that depend on the runtime.
 - `$sys.clean(fn)` — register cleanup on unmount (timers, listeners)
 - `$sys.activateLinks()` — re-scan `ALink` elements to apply active-link indication. Useful after JavaScript-driven URL fragment changes.
-- `$sys.emit(target, event)` — dispatch a DOM event from JS and await every hook request it triggers (including `HoldSettle` and `After` actions); resolves to the number of hook requests, rejects with `HookErr` on any failure (hooks canceled by a scope or by `RaceStrict`, or `Key`-filtered, count as failures). Client counterpart of `doors.Emitter`. Build the event yourself (`new PointerEvent("click", {bubbles: true})`); safe at script top level.
+- `$sys.emit(target, event)` — dispatch a DOM event from JS and await every hook request it triggers until all have settled (including `HoldSettle` and `After` actions); hooks of events it triggers (such as the form submit after a click on a submit button) are included. Resolves to `{ ok, canceled, failed }`: `ok` = completed count, `canceled` = count canceled by a scope, `RaceStrict`/`RaceLatest`, or an `ExactTarget`/`Key` filter, `failed` = `HookErr[]` of the rest. A failed or canceled hook does not reject. Rejects only when nothing is dispatched: a `:disabled` target (incl. inside a disabled `<fieldset>`) or one inside an `inert` subtree is refused with canceled `HookErr` (`target is disabled`); `window`/`document` never refused. Client counterpart of `doors.Emitter`. Build the event yourself (`new PointerEvent("click", {bubbles: true})`); safe at script top level.
 - top-level `await`
 
 Auto-detected request body: `undefined`→no body (`$fetch` only; `$hook(name)` without an argument sends `null`), `FormData`→multipart, `URLSearchParams`→form-urlencoded, `Blob`→raw blob body, `File`→raw file body, `ReadableStream`→`application/octet-stream`, `ArrayBuffer`/typed arrays→`application/octet-stream`, anything else→JSON.
@@ -57,7 +63,7 @@ Auto-detected request body: `undefined`→no body (`$fetch` only; `$hook(name)` 
 </script>
 ```
 
-`data:name=(expr)` is GoX shorthand for `doors.AData{Name: "name", Value: expr}`. Values are encoded at render time (string → text, `[]byte` → binary, else JSON); a value that fails to encode fails the render (see Render errors in `07-door.md`).
+`data:name=(expr)` is GoX shorthand for `doors.AData{Name: "name", Value: expr}`. Values are encoded at render time (string → text, `[]byte` → binary, a resource → its URL string, else JSON); a value that fails to encode or a resource that fails to read/build fails the render (see Render errors in `07-door.md`).
 
 `$data`, `$hook`, and `$fetch` read attrs from the managed script element they run on. Attach `AData`, `AHook`, or `ARawHook` to that same managed inline script, or to the `src` script marked `inline`; a separate module script does not inherit those helpers from another script element.
 
@@ -134,11 +140,11 @@ For raw body access, multipart, custom responses.
 
 ### Race
 
-Both hook attrs take `Race`, same as event attrs (see `09-events.md`): `doors.RaceSerial` (default, one at a time in order of arrival), `doors.RaceParallel`, `doors.RaceStrict`. `Batch` works as on event attrs too: the browser applies the handler's page updates together once it finishes.
+Both hook attrs take `Race`, same as event attrs (see `09-events.md`): `doors.RaceSerial` (default, one at a time in order of arrival), `doors.RaceParallel`, `doors.RaceStrict`, `doors.RaceLatest`. `Batch` works as on event attrs too: the browser applies the handler's page updates together once it finishes.
 
 With `Race: doors.RaceParallel`, calls to the same hook run concurrently instead of one at a time. Handler must synchronize shared state itself. Returning `true` stops new calls; hook removed once running calls finish. For long-held streaming responses and independent parallel requests.
 
-With `Race: doors.RaceStrict`, a call that arrives after a newer one is not run; its `$hook`/`$fetch` rejects with a canceled `HookErr`.
+With `Race: doors.RaceStrict` or `doors.RaceLatest`, a canceled call is not run; its `$hook`/`$fetch` rejects with a canceled `HookErr`.
 
 ### Client Side
 
@@ -151,7 +157,7 @@ Manual `$hook(...)` and `$fetch(...)` calls throw `HookErr`. Catch it when failu
 
 Request body auto-detected: `undefined` (no body; `$fetch` only, `$hook(name)` without an argument sends `null`), `FormData` (multipart), `URLSearchParams` (form), `Blob` (raw blob body), `File` (raw file body), `ReadableStream` (octet stream), `ArrayBuffer`/typed arrays (octet stream), other (JSON).
 
-`$hook`/`AHook` enhance page logic (drag-and-drop, scroll sync) and keep Doors scopes, indication, and errors. When the client brings its own code and speaks plain HTTP (React island API, third-party widget, `EventSource`, `WebSocket`, fetch uploads/downloads with progress, web workers), pass a `doors.NewHook` URL via `data:` instead; see `14-resources.md` Custom Endpoints. For static files loaded by URL, use `doors.NewResource`.
+`$hook`/`AHook` enhance page logic (drag-and-drop, scroll sync) and keep Doors scopes, indication, and errors. When the client brings its own code and speaks plain HTTP (React island API, third-party widget, `EventSource`, `WebSocket`, fetch uploads/downloads with progress, web workers), pass the handler via `data:api=(doors.ResourceHandler(h))` instead (`$data("api")` is the endpoint path); see `14-resources.md` Custom Endpoints. For static files loaded by URL, pass a hosted chain the same way (`data:x=(r.Script())`, `(r.Style())`, `(r.ContentType(t).Cache())`); `URL(ctx)` only when Go code needs the string, see `14-resources.md` URL in Code.
 
 ### $on (for ActionEmit)
 
@@ -186,7 +192,7 @@ Emit timing: a managed script loads from its own URL and runs once the browser h
 ## Modules
 
 ```gox
-<script src=(doors.ResourceLocalFS("web/react/index.tsx"))
+<script (doors.ResourceLocalFS("web/react/index.tsx"))
     type="module" bundle specifier="app"></script>
 
 <script>
@@ -225,8 +231,32 @@ var EditorScript []byte // already-bundled ESM, exports createEditor
 
 Preload without execution — a `modulepreload` link both preloads the bytes and (with `specifier`) registers the import-map entry, without running the module until something `import()`s it:
 ```gox
-<link rel="modulepreload" href=(resource) specifier="app">
+<link rel="modulepreload" (resource) specifier="app">
 ```
+
+A non-module script stage on `modulepreload` is an error unless `type="module"` is set; use `.Script().Module()`.
+
+### Module URL in Code
+
+Three ways to reach a module from client code:
+
+| Form | Use when |
+|---|---|
+| `<script (r) type="module" specifier="app">` | page-wide module that runs and is imported by name |
+| `<link rel="modulepreload" (r) specifier="app">` | page-wide module imported by name, runs only on `import("app")` |
+| `data:` + `import($data(...))` | module owned by one component, or first rendered by a later update (no import map involved) |
+
+```gox
+<script data:chart=(doors.ResourceFS(web, "chart.ts").Script().Module().Bundle())>
+    const { draw } = await import($data("chart"))
+    draw(document.getElementById("chart"))
+</script>
+```
+- `data:` takes the chain directly; `$data("chart")` is the URL string (same as `URL(ctx)`)
+- `import()` needs `.Module().Bundle()` (either alone does not give an importable self-contained module)
+- A plain source in `data:` is an asset (hook): always go through `.Script()` for a built, hosted module
+- A build error fails the render and is logged, like a broken `src`
+- The hosted build is reused across renders; a Go-side string for the whole app: store-backed helper (`14-resources.md` App-Wide Module URL)
 
 ## Esbuild
 

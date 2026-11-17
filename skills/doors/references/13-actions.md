@@ -123,7 +123,7 @@ On: func(ctx context.Context, r doors.RequestPointer) bool {
 - `Call(ctx, action) <-chan error`: first value = scheduled (`nil`, or build error). Detached ctx only: second value = `nil` (browser answered, dst written), error (client/decode failure), or `context.Canceled` (canceled after scheduling). Any other ctx: closes after the first value, dst unwritten, no error. Canceled before scheduling = `context.Canceled` as the first value
 - Match failures with `errors.Is`: `ErrExecution` = action reached the browser and failed there, `ErrTerminated` = instance ended first; location actions can also yield `ErrPathModel`/`ErrPathEncode` (see [routing](./05-routing.md))
 - `ActionEmit[T]` declares its result type; `.Into(&dst)` arms decoding. Fire-and-forget: `ActionEmit[any]{...}` without Into
-- `Emitter` event methods return `ActionInto[int]` — `.Into(&n)` captures hook requests triggered (any failure fails the call); `Setter.Set` counts live elements reached. See [element handles](./17-element-handles.md).
+- `Emitter` event methods return `ActionInto[EmitReport]` — `.Into(&report)` captures `OK`/`Canceled` counts and `Failed` errors of the hook requests triggered (a failed or canceled hook does not fail the call); `Setter.Set` returns `ActionInto[int]` counting live elements reached. See [element handles](./17-element-handles.md).
 - Into has no effect inside Before/After/OnError lists (no result transport)
 - Only a detached ctx delivers the result. Never wait on the channel during render or in beam subscriptions. Wait in a goroutine of your own with `DetachedContext(ctx)`; in `doors.Go` when the wait should follow a rendered subtree; with `InstanceContext(ctx)` when it should outlive the current owner
 - Batches (`Batch: true`, `OnBatch`) do not affect the channel; a `DetachedContext(ctx)` call is delivered outside the batch
@@ -146,4 +146,4 @@ On: func(ctx context.Context, r doors.RequestPointer) bool {
 - [javascript.md](./15-javascript.md) — `$on`, `ActionEmit`
 - [indication.md](./12-indication.md) — `ActionIndicate`, indicator types
 - [navigation.md](./10-navigation.md) — `ALink` vs location actions
-- [shared-attr.md](./17-element-handles.md) — element handles: `Setter`, `Emitter` and their `ActionInto[int]` semantics
+- [shared-attr.md](./17-element-handles.md) — element handles: `Setter`, `Emitter` and their `ActionInto` results

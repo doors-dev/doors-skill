@@ -16,15 +16,13 @@ GoX compiles `.gox` templates to `.go`. Write HTML-like templates as typed Go ex
 
 ## Prerequisites
 
-Run `gox ver` first — it must print a version (e.g. `v0.3.0`). Without `gox` on `PATH`, generation fails and builds error with `undefined: example` for every template.
+Run `gox ver` first — it must print a version (e.g. `v0.4.0`). Without `gox` on `PATH`, generation fails and builds error with `undefined: example` for every template.
 
 Install:
 - **Prebuilt binary (recommended):** download from [GitHub Releases](https://github.com/doors-dev/gox/releases), put on `PATH`.
-- **From source:** `make install` — requires Go, Cargo, and a native toolchain (bundled Rust formatter). **No `go install ...@latest` shortcut** — native deps prevent it.
+- **From source:** `make install` — requires Go (1.27+, or `gox fmt` rejects `.go` files with generic methods), Cargo, and a native toolchain (bundled Rust formatter). **No `go install ...@latest` shortcut** — native deps prevent it.
 
 Stop and ask before installing if the environment forbids network access or global installs.
-
-The Go module side is automatic: `go get github.com/doors-dev/gox` (or just `import` and `go mod tidy`). **Keep CLI and module versions in sync** — generated files carry a version marker and refuse mismatched runtimes. `gox ver` and the `// Managed by GoX vX.Y.Z` header must agree.
 
 **Editor extension (always recommended).** Without it, `.gox` looks broken, go-to-definition/completion across `.gox`↔`.go` are disabled. Extensions also start the GoX language server (proxies `gopls`).
 - VS Code: [`doors-dev/vscode-gox`](https://marketplace.visualstudio.com/items?itemName=doors-dev.gox)
@@ -47,12 +45,13 @@ Don't:
 
 ```
 gox fmt           # format .gox and .go (and embedded <script>/<style>)
-gox gen           # regenerate .x.go for current directory
-gox gen ./pkg     # regenerate a specific path
+gox gen           # regenerate .x.go under the current directory (recursive)
+gox gen ./pkg     # regenerate a specific path (recursive)
+gox gen -check    # report stale .x.go, write nothing; exit 1 = needs work, 2 = errors (also gox fmt -check)
 go run .          # build/run as normal Go
 ```
 
-`gox fmt` and `gox gen` accept **any number of file, directory, or recursion operands** (`./...`, `pkg/...`); default `.`. A directory is processed recursively (`./pkg` ≡ `./pkg/...`), so `gox gen .` from the repo root regenerates every package in one shot. `.gitignore` is respected unless `-no-ignore`. Other flags: `-check` (report files needing work, exit non-zero, write nothing), `-force` (gen: overwrite generated files without checking), `-no-go` (fmt: format `.gox` only). Other subcommands: `gox ver` (version), `gox srv` (language server, the default when run bare).
+`gox fmt` and `gox gen` accept **any number of file, directory, or recursion operands** (`./...`, `pkg/...`); default `.`. A directory is processed recursively (`./pkg` ≡ `./pkg/...`), so `gox gen .` from the repo root regenerates every package in one shot. `.gitignore` is respected unless `-no-ignore`. Other flags: `-check` (report files needing work, write nothing; exit 1 = needs work, 2 = errors), `-force` (gen: overwrite generated files without checking), `-no-go` (fmt: format `.gox` only). Other subcommands: `gox ver` (version), `gox srv` (language server, the default when run bare).
 
 After editing `.gox`, run `gox gen` before `go build`/`go run`/`go test`. "undefined: MyElem" usually means missing regen.
 
@@ -71,9 +70,7 @@ A `.gox` file is a Go file plus the `elem` keyword and HTML literals. Use `.gox`
 
 ### Old syntax compatibility
 
-Old forms `~func { ... }` and `~{ ... }` may appear in existing code. `gox fmt`
-automatically converts them to `~({ ... })` (GoX expression) and `~~ ... ~~`
-(Go snippet). Keep the `gox` binary up to date — run `gox ver` to check.
+The legacy forms `~func { ... }` and `~{ ... }` are syntax errors since GoX v0.4.0 (`gox fmt` does not convert them). Rewrite them by hand as `~({ ... })` (GoX expression) and `~~ ... ~~` (Go snippet); in attributes, `attr=({ ... })`.
 
 ### HTML literals are Go expressions
 
@@ -121,7 +118,9 @@ Method form (typically `gox.Comp.Main`):
 elem (u User) Main() { <li>~(u.Name)</li> }
 ```
 
-Anonymous `elem() { ... }` exists. Prefer named helpers; use anonymous only when an inline template fn is the clearest fit.
+Type parameters work as in Go: `elem List[T any](items []T) { ... }`. Methods can declare their own (`elem (t Table) Row[T any](v T) { ... }`, `func (s Store) Get[T any]() T`); generic methods need `go 1.27` in go.mod.
+
+Anonymous `elem() { ... }` exists. Prefer named helpers; use anonymous only when an inline template fn is the clearest fit (not as a generic empty-arg wrapper).
 
 **Pitfall:** `elem` is a reserved keyword. Cannot be used as variable/parameter/field name (e.g. `Proxy(cur, elem gox.Elem)` is a parse error — rename to `el`).
 
@@ -159,7 +158,7 @@ elem MaybePanel(show bool) {
 ```gox
 elem BrokenPanel() {
     <div>
-        ~~ return nil ~~   // bad: exits before </div>
+        ~~ return nil ~~   ~// bad: exits before </div>
     </div>
 }
 ```
@@ -169,7 +168,7 @@ Inside open markup, use `~(if ...)` or an inline `~({ return nil })` to skip onl
 ```gox
 elem OptionalChild(show bool) {
     <div>
-        ~// prefereable form:
+        ~// preferable form:
         ~(if show { <span>Visible</span> })
         ~// in case of complex logic:
         ~({
@@ -200,7 +199,7 @@ elem SharedValue() {
 
 ```gox
 <p>~(user.Name)</p>
-<p>~(a, " ", b, " ", c)</p>   // multi-arg, left-to-right
+<p>~(a, " ", b, " ", c)</p>   ~// multi-arg, left-to-right
 ```
 
 Parens **omittable only for literals** (string, numeric, composite):
@@ -214,29 +213,25 @@ Parens **omittable only for literals** (string, numeric, composite):
 
 ### Text whitespace
 
-Template indentation and blank lines are normilized, but spaces that are part of text content are preserved. A leading or trailing space next to real text is intentional and appears in output:
+Whitespace inside text (spaces, tabs, line breaks) collapses to one space. At the start or end of a text (next to a tag, a placeholder, or the element's edge), tabs and line breaks are dropped and a space is kept as one space. Whitespace-only text between tags renders nothing. So indent with tabs (space indentation becomes a leading space), and write the separating space yourself when text meets a tag or placeholder: `Hello, ~(name)` then a `welcome back` line renders `Hello, Annwelcome back`; use ` welcome back` or `~" "`.
 
 ```gox
-<span> Text</span>      // <span> Text</span>
-<span>Text </span>      // <span>Text </span>
-<span>Text ~(v)</span>  // text node is "Text ", then v
+<span> Text</span>      ~// <span> Text</span>
+<span>Text </span>      ~// <span>Text </span>
+<span>Text ~(v)</span>  ~// text node is "Text ", then v
 ```
-
-For multi-line text, indentation used to line up the template is removed. If the line has an extra space before or after the actual text, that extra space is preserved:
 
 ```gox
 <span>
 \t Text
 </span>
-// renders: <span> Text</span>
+~// renders: <span> Text</span>
 
 <span>
 \tText
 </span>
-// renders: <span>Text</span>
+~// renders: <span>Text</span>
 ```
-
-Adjacent text-only lines are joined with a single space (`One` then `Two` renders `One Two`). Blank lines and whitespace-only lines render nothing. Text next to tags does not get an automatic separator: write an explicit leading/trailing space in the text when you need one.
 
 `gox fmt` removes indentation and blank/edge whitespace that has no output effect; spaces that would be emitted are preserved.
 
@@ -310,7 +305,7 @@ Render-time evaluation; the return value (text, component, or HTML literal) is i
 </div>
 ```
 
-For simple conditions prefer `~(if ...)`. The GoX expression form works in attribute values too.
+For simple conditions prefer `~(if ...)`. The GoX expression form works in attribute values too, without `~`: `class=({ ... })`.
 
 ### Fragments: `<>...</>`
 
@@ -327,14 +322,14 @@ Layout(<>
 
 ### Attributes
 
-- String/numeric literal: `<div class="card" tabindex=0>`.
+- String/numeric literal: `<div class="card" tabindex=0>`. Strings are Go literals: `"..."` with Go escapes, or backticks (``pattern=`\d+` ``). Single-quoted HTML values are not allowed (`class='card'` is a syntax error).
 - Go expression in parens: `<div id=(id) title=(user.Bio)>`.
 - GoX expression (eval at render): `<input checked=({ return u.Agreed })>`.
 - Bare attribute: `<input required>` ≡ `required=(true)`.
-- `nil` or `false` → attribute omitted (cosmetic stray space may remain).
+- `nil` or `false` → attribute omitted. Exception: `data:name` on `<script>` still renders for `nil`, and `$data("name")` gives JS `null`.
 - `true` → bare name: `checked=(true)` → `checked`.
 - **Names case-sensitive**: `class` ≠ `Class` (both emitted).
-- **Output order: alphabetical**, not source order.
+- **Output order: sorted by name (byte order, uppercase first)**, not source order.
 
 Attribute values follow the same rules as placeholders (`~(expr)`), but `=` replaces `~`:
 - Literal: `class="card"`, `tabindex=0`
@@ -349,8 +344,9 @@ Doors modifiers include event attrs, resources, `doors.Class`, and local `gox.Mo
 
 ```gox
 <button (doors.Class("primary"))>Go</button>
-<button (doors.Class("a"), doors.AClick{On: save})>Multi</button>   // comma-separated
+<button (doors.Class("a"), doors.AClick{On: save})>Multi</button>   ~// comma-separated
 <img (doors.ResourceFS(assets, "logo.svg"))>
+<script (doors.ResourceFS(web, "app.ts").Script().Module().Bundle())></script>   ~// resource chain
 ```
 
 **Writing your own `Modify`** is fine for reusable attribute bundles (design-system presets, analytics, form conventions):
@@ -371,11 +367,31 @@ func (p PrimaryCTA) Modify(_ context.Context, _ string, attrs gox.Attrs) error {
 // Usage: <button (PrimaryCTA{Label: "Save"})>Save</button>
 ```
 
-Mutate via `attrs.Get(name).Set(value)` — **not** `attrs.Set(...)` (doesn't exist). For inline use: `gox.ModifyFunc(func(ctx, tag, attrs) error { ... })`.
+Mutate via `attrs.Get(name).Set(value)` — **not** `attrs.Set(...)` (doesn't exist). For inline use: `gox.ModifyFunc(func(ctx context.Context, tag string, attrs gox.Attrs) error { ... })`.
 
 ### Void / self-closing elements
 
 Standard HTML void tags (`<br>`, `<hr>`, `<img>`, `<input>`, `<meta>`, `<link>`, …) accept `<br>`, `<br/>`, `<br />` — all render `<br>`. **`</br>` is an error.**
+
+### Implicit end tags
+
+As in HTML, an open element is closed by its parent's end tag, by the end of the block, or by a start tag that can't go inside it:
+- `<p>` by a block element: `<div>`, `<p>`, `<ul>`, `<ol>`, `<dl>`, `<table>`, `<form>`, `<pre>`, `<section>`, `<article>`, `<header>`, `<footer>`, `<nav>`, `<h1>`–`<h6>`, `<hr>`, `<li>`, `<dt>`, `<dd>`, `<blockquote>`, `<details>`, `<dialog>`, `<menu>`, … (not by inline tags or custom elements).
+- `<li>` by `<li>`; `<dt>`/`<dd>` by `<dt>`/`<dd>`; `<option>` by `<option>`, `<optgroup>` or `<hr>`.
+- `<td>`/`<th>` by `<td>`, `<th>`, `<tr>`; `<tr>` by `<tr>`; cells, rows and table sections by `<caption>`, `<colgroup>`, `<col>`, `<thead>`, `<tbody>`, `<tfoot>`.
+
+```gox
+<ul><li>One<li>Two</ul>   ~// <ul><li>One</li><li>Two</li></ul>
+```
+
+End tags match open elements by full name. An end tag that matches nothing open (`</p>` after a block closed its `<p>`, `</br>`, a misspelled `</my-cardd>`) is a syntax error when it is not inside another element (directly in an `elem` body, in `~( )`, or in an HTML literal in Go code). Inside another element it is dropped (the editor warns "`</p>` does not match an open element and is ignored"), and `gox fmt` deletes it:
+
+```gox
+<p>Intro<ul><li>a</li></ul></p>                  ~// syntax error near "</p"
+<div><p>Intro<ul><li>a</li></ul>Outro</p></div>  ~// <div><p>Intro</p><ul><li>a</li></ul>Outro</div>
+```
+
+Close `<p>` before a list, table or other block, or use `<div>`. Proxies and slots capture the element as HTML closes it: `~>(p) <p>Intro<ul>…` wraps only `<p>Intro</p>`. `gox fmt` writes out every implicit end tag, so its diff shows how GoX read the markup.
 
 ### Reading helper docs: naming -> syntax
 
@@ -407,13 +423,20 @@ type Output interface {
 
 Text/placeholders are HTML-escaped:
 ```gox
-<p>~("<script>")</p>   // → &lt;script&gt;
+<p>~("<script>")</p>   ~// → &lt;script&gt;
 ```
+
+Template text and attribute values are escaped the same way, so HTML entities are not decoded:
+```gox
+<p title="a&nbsp;b">x&nbsp;y &copy;</p>   ~// → <p title="a&amp;nbsp;b">x&amp;nbsp;y &amp;copy;</p>
+```
+
+Type the character itself (`©`, a non-breaking space, `<` as `~("<")`); in attribute values a Go escape also works (`title="a b"`). In text you can also use a raw block for entities: `<:>&nbsp;</:>`.
 
 Escape the two characters GoX treats specially in template text by rendering string literals:
 ```gox
-~"~"   // renders ~
-~"}"   // renders an unmatched }
+~"~"   ~// renders ~
+~"}"   ~// renders an unmatched }
 ```
 
 **Inside `<script>` and `<style>`, the body is JS/CSS, not template text.** Write normal JavaScript/CSS — `~`, `{`, and `}` are *not* special there, so braces, arrow functions, object literals, and template literals need no escaping. `gox fmt` even formats the embedded JS/CSS. (Interpolation via `~(...)` does not work inside a script/style body; pass server values in with `data:name=(expr)` and read them with `$data("name")` — see [javascript.md](./15-javascript.md).)
@@ -441,8 +464,8 @@ elem (c Card) Main() {
 
 Render via normal placeholder (no JSX-style `<MyComp/>`):
 ```gox
-~(myComponent)        // identifier needs parens
-~User{Name: "Z"}      // composite literal, parens optional
+~(myComponent)        ~// identifier needs parens
+~User{Name: "Z"}      ~// composite literal, parens optional
 ```
 
 ### `elem` helper vs component struct
@@ -560,7 +583,7 @@ Same idea via struct field of type `gox.Elem` or `gox.Comp` (the latter accepts 
 
 ### Proxies: `~>(p) nextItem`
 
-A `Proxy` captures the next renderable item at render time (element, component placeholder, `~({...})`, raw block, text, control-flow, or placeholder).
+A `Proxy` captures the next renderable item at render time (element, component placeholder, `~({...})`, raw block, text, control-flow, or placeholder). An HTML comment or a `~~ ~~` snippet also counts as the item; `~//` and `~/* */` comments are skipped.
 
 **Captures one item only.** `~>(p) Text ~(dd)` captures only `Text`. Group siblings into one item: wrapper element, fragment, or multi-value placeholder `~>(p) ~("Text ", dd)`.
 
@@ -598,7 +621,7 @@ func (wrap) Proxy(cur gox.Cursor, e gox.Elem) error {
 }
 ```
 
-For one-offs: `gox.ProxyFunc(func(cur, e) error { ... })`.
+For one-offs: `gox.ProxyFunc(func(cur gox.Cursor, el gox.Elem) error { ... })`.
 
 ### Raw HTML
 
@@ -677,13 +700,13 @@ doors.Class("button").Add("primary").Filter("hidden")
 
 Three attachment styles:
 ```gox
-// 1. Modifier (merges with class="..." on same element)
+~// 1. Modifier (merges with class="..." on same element)
 <button (doors.Class("button primary")) class="wide">Save</button>
 
-// 2. Attribute value
+~// 2. Attribute value
 <button class=(doors.Class("button", "primary"))>Save</button>
 
-// 3. Proxy — propagates through containers/components to first real element
+~// 3. Proxy — propagates through containers/components to first real element
 ~>(doors.Class("button primary")) <button>Save</button>
 ```
 
@@ -732,17 +755,18 @@ Captured item must begin with an element/component/container that resolves to an
 9. **Variable from tag scope referenced later** — tags create scopes. Declare in top-level snippet.
 10. **`~name` without parens** — parse error. Always `~(name)`. Parenless = literals only.
 11. **Mixed `class` and `Class`** — separate attributes. Pick one casing - lower by default.
-12. **Relied on attribute source order** — output is alphabetical.
+12. **Relied on attribute source order** — output is sorted by name (byte order).
 13. **Tried `<MyComponent/>`** — no JSX. Use `~(myComponent)` or composite-literal placeholder.
 14. **Used `Main` as field name** — collides with render method. Rename.
 15. **Pure-Go file as `.gox`** — use `.go` when no GoX/HTML syntax.
 16. **`~(...)` in attribute** — text/template positions only. Use `id=(id)`, `checked=({ ... })`.
 17. **Called `attrs.Set(...)` in `Modify`** — method is `attrs.Get(name).Set(value)`.
-18. **`</br>` / `</input>`** — void tags have no closing. Use `<br>`, `<br/>`, `<br />`.
-19. **Unescaped via `~(trustedHTML)`** — that escapes. `<:>...</:>` or a hand-written `gox.Elem` + `cur.Raw` for trusted only.
-20. **Whitespace between placeholders** — `~(a) ~(b)`, `~(a)~(b)` have no space, `~(a, " ", b)` has.
-21. **Expected raw template indentation/newlines** — normalized. Intentional spaces preserved. Use raw blocks for verbatim.
-22. **Expected proxy to capture multiple siblings** — captures one. Group via fragment/wrapper/multi-value placeholder.
-23. **Custom `Proxy` for ordinary wrapping/attributes** — use components, `Modify`, or `doors.ProxyMod` instead.
-24. **Version drift** — generated files have version markers; CI must use matching `gox`.
-25. **Added `goxx` to a Doors project** — remove it and use Doors helpers.
+18. **Unescaped via `~(trustedHTML)`** — that escapes. `<:>...</:>` or a hand-written `gox.Elem` + `cur.Raw` for trusted only.
+19. **Whitespace between placeholders** — `~(a) ~(b)`, `~(a)~(b)` have no space, `~(a, " ", b)` has.
+20. **Expected raw template indentation/newlines** — normalized. Intentional spaces preserved. Use raw blocks for verbatim.
+21. **Expected proxy to capture multiple siblings** — captures one. Group via fragment/wrapper/multi-value placeholder.
+22. **Custom `Proxy` for ordinary wrapping/attributes** — use components, `Modify`, or `doors.ProxyMod` instead.
+23. **Removed or omitted `import "github.com/doors-dev/gox"` in a `.gox`** — required whenever the file uses `elem` or HTML syntax, even if your code never names `gox` (the generated `.x.go` does). Otherwise: `undefined: gox`.
+24. **HTML entities in text or attributes** (`&nbsp;`, `&copy;`, `&mdash;`) — escaped, render as literal `&nbsp;`. Type the character, or `<:>&nbsp;</:>` in text.
+25. **`</p>` after a list/table inside `<p>`** — the block already closed the `<p>`; the stray end tag is a syntax error at top level, dropped inside an element. Close `<p>` first or use `<div>`.
+26. **Added `goxx` to a Doors project** — remove it and use Doors helpers.

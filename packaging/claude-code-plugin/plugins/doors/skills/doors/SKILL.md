@@ -3,7 +3,7 @@ name: doors
 description: Always use this skill whenever creating, editing, reviewing, debugging, or extending any Doors project, even for small changes. Do not attempt Doors-specific APIs from memory. Always read the bundled Doors-specific GoX reference first. Covers Doors app structure, routing, reactive state, events/hooks, doors, components, navigation, resources, JavaScript, styles, auth, sessions, background data, configuration, GoX, and framework-specific conventions.
 license: Apache-2.0
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
   language: go
 ---
 
@@ -39,13 +39,13 @@ Ask the user only for product requirements that cannot be inferred from the code
 - Components are static by default: `Main()` renders once and stays. Updates are targeted — only fragments triggered by `Bind`/`Effect`, `Sub` callbacks, or direct Door method calls (`Inner`, `Outer`, `Static`, `Reload`, `Deferred*`) from handlers and Sub callbacks re-render. The rest of the tree is untouched.
 - State derivation replaces virtual DOM diffing. For all reactive state, use a ladder: branch key owned at that level (often derived), narrower branches, then field/param/query binds only in consuming fragments.
 - `Route` swaps only when the matched branch changes (a `RouteBind` leaf rerenders on value change); `Bind`/`Effect` rerender on subscribed value changes, so derive before binding.
-- A hook is a server HTTP handler created during render. It lives as long as the Door that encloses it and answers only the session that rendered it. Event handlers, private resources, and custom endpoints (`NewHook`) are all hooks.
+- A hook is a server HTTP handler created during render. It lives as long as the Door that encloses it and answers only the session that rendered it. Event handlers, private resources, and custom endpoints (`data:api=(doors.ResourceHandler(h))` on a script) are all hooks.
 - Lifecycle hooks tie work to render delivery: `OnReady` (content enqueued for the client), `OnClean` (content cleared), `OnSettle` (everything the handler started is queued for delivery), `OnBatch` (a group of updates applied in the browser at once), `HoldSettle` (keep indicators, scopes, and the `$hook` promise pending until released).
 - A session is shared across browser pages/tabs. An instance is one live page with its own render tree, handlers, subscriptions, and lifecycle. Sessions are created lazily on first actual touch of a session API.
 
 ### Concurrency
 
-- Calls to the same hook run one at a time by default, in order of arrival (`doors.RaceSerial`). Different hooks can run in parallel. The `Race` field on any event attr or hook changes that: `doors.RaceParallel` runs its calls concurrently, `doors.RaceStrict` runs one at a time and cancels calls that arrive out of order. Resource hooks (`NewHook`, script/style sources) are always concurrent. `Batch`, next to `Race`, makes the browser apply a handler's updates together.
+- Calls to the same hook run one at a time by default, in order of arrival (`doors.RaceSerial`). Different hooks can run in parallel. The `Race` field on any event attr or hook changes that: `doors.RaceParallel` runs its calls concurrently, `doors.RaceStrict` runs one at a time and cancels calls that arrive out of order, `doors.RaceLatest` also cancels a waiting call once a newer one arrives. Resource hooks (handler resources, script/style sources) are always concurrent. `Batch`, next to `Race`, makes the browser apply a handler's updates together.
 - Scopes prevent UI artifacts from parallel hooks (e.g. blocking a related hook while another is in progress). Scopes are a client-side scheduling hint for UX, not a concurrency guarantee — do not rely on them for data safety.
 - When working with state beyond `doors.Source`/`doors.Beam` (plain struct fields, slices, maps, external caches), you must handle concurrency yourself. `Source`/`Beam` mutations are safe to call from any context; plain Go state is not.
 - Mutating operations — Door methods, `doors.Reload`, `doors.DeferredInner`/`DeferredOuter`/`DeferredStatic`, `Source.Update`/`Mutate`, `doors.Call` — return a `<-chan error` completion channel. Ignore it; see Rendering.
@@ -87,7 +87,7 @@ After `references/00-gox.md`, read remaining references by task, not all at once
 | Control request scheduling: prevent double-clicks, rate-limit, debounce, queue, cancel stale | `references/11-scopes.md` |
 | Run browser-side actions before/after/on-error, emit JS events, scroll, read the client clock, or hard navigate | `references/13-actions.md` |
 | Serve images, downloads, embedded files, or external URLs | `references/14-resources.md` |
-| Give browser code its own HTTP endpoint (island API, `EventSource`, `WebSocket`, third-party widget) with `NewHook` | `references/14-resources.md` (Custom Endpoints), `references/15-javascript.md` |
+| Give browser code its own HTTP endpoint (island API, `EventSource`, `WebSocket`, third-party widget) with `data:api=(doors.ResourceHandler(h))` on a script | `references/14-resources.md` (Custom Endpoints), `references/15-javascript.md` |
 | Add inline scripts, managed scripts, JS modules, Go-to-JS data, or JS-to-Go hooks | `references/15-javascript.md` |
 | Add stylesheets, Tailwind classes, inline styles, or class composition | `references/16-styles.md` |
 | Element handles: sync attributes across elements (`Setter`) or dispatch synthetic DOM events from the server (`Emitter`) | `references/17-element-handles.md`, `references/09-events.md`, `references/13-actions.md` |
@@ -216,10 +216,10 @@ Keep these rules in the top-level skill because they affect nearly every Doors c
 - `references/08-components.md` - reactive components, `Bind` vs `Effect`, struct patterns, constructors, state ownership, lifecycle
 - `references/09-events.md` - event attrs, request types, handler flow, forms, key `Key` filters, per-hook `RequestTimeout`, reuse, `Race`, `Batch`
 - `references/10-navigation.md` - `ALink`, `Batch`, active links, programmatic navigation, `LocationEncoder`
-- `references/11-scopes.md` - blocking, serial, debounce, latest, frame, concurrent, sharing, pipelines
+- `references/11-scopes.md` - blocking, serial, debounce, latest, frame, checkpoint, concurrent, sharing, pipelines
 - `references/12-indication.md` - indicators, selectors, combining, `ActionIndicate`
 - `references/13-actions.md` - `Call`, `Into`, `ActionEmit[T]`, `ActionScroll`, `ActionIndicate`, `ActionTime`, location actions, `ErrExecution`/`ErrTerminated`/`ErrPathModel`/`ErrPathEncode` sentinels
-- `references/14-resources.md` - `ResourceFS`, `ResourceBytes`, resource attrs, cache/type/name/portable, `NewResource` URL in code, external resources
+- `references/14-resources.md` - hook vs hosted, `ResourceFS`/`ResourceBytes`/handlers, builder chains (`.Script()`/`.Style()`/`.ContentType()`/`.Cache()`/`.Portable()`), attrs, script `data:` resources, `URL(ctx)` in Go code, app-wide URL via `NewStore`, custom endpoints, external resources
 - `references/15-javascript.md` - managed scripts, `AHook`, `$hook`, `$data`, `$on`, emit timing, modules, esbuild
 - `references/16-styles.md` - class helper, stylesheet resources, raw/private styles, framework CSS (`d0-r` via constructed stylesheet, no `doors.css`)
 - `references/17-element-handles.md` - element handles: `Setter` (attributes), `Emitter` (synthetic events), value semantics, removed `AShared`

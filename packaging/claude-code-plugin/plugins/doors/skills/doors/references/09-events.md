@@ -143,7 +143,7 @@ type ParsedForm interface {
 }
 ```
 
-`ASubmit[T]` uses `github.com/go-playground/form/v4` for decoding form values into `D`. Request body is bounded by `ServerRequestBodyLimit` (default 8 MB), which also serves as the max memory limit for form parsing.
+`ASubmit[T]` uses `github.com/go-playground/form/v4` for decoding form values into `D`. As in a native submit, the submitting button's `name`/`value` is included, so several submit buttons can share one name (`name="intent" value="draft"|"publish"`) and the handler reads which was pressed. Request body is bounded by `ServerRequestBodyLimit` (default 8 MB), which also serves as the max memory limit for form parsing.
 
 For uploads or custom multipart parsing, use `ARawSubmit`, set an intentional parse limit with `ParseForm(maxMemory)`, and treat filenames, content types, form fields, and file bytes as client-controlled. Validate by parsing/sniffing the content you accept; never trust the browser-provided filename or MIME type as proof, and do not accept/reject CSV solely by filename suffix.
 
@@ -243,12 +243,13 @@ Reusing one activated attr shares the same hook instance → one execution queue
 | `doors.RaceSerial` (default) | one at a time, in order of arrival |
 | `doors.RaceParallel` | calls run concurrently; handler must synchronize shared state; `true` result stops new calls, removal after running calls finish |
 | `doors.RaceStrict` | one at a time; a call that arrives after a newer one is canceled instead of run (nothing is reordered; in-order calls all run) |
+| `doors.RaceLatest` | `RaceStrict`, plus a waiting call is canceled once a newer one arrives: while one call runs, only the newest queued call runs next |
 
-Use `RaceStrict` when only the newest input matters (live search, autosave, selection), so an older call never overwrites a newer result. A canceled call is silent on event attrs (`OnError` does not run); `$hook`/`$fetch`/`$sys.emit` reject with a canceled `HookErr`. `Race` is backend-side; scopes are client-side and combine with it (`ScopeLatest` + `RaceStrict`). `ALink` hooks are always strict; resource hooks (`NewHook`, script/style sources) are always parallel.
+Use `RaceStrict` when every call should run but a stale one must not overwrite a newer result (autosave, selection); `RaceLatest` when only the newest input matters (live search, filters, sliders). A canceled call is silent on event attrs (`OnError` does not run); `$hook`/`$fetch` reject with a canceled `HookErr`, and `$sys.emit` counts it in `canceled`. `Race` is backend-side; scopes are client-side and combine with it (`ScopeLatest` + `RaceLatest`). `ALink` hooks are always strict; resource hooks (`ResourceHandler(h).URL(ctx)` endpoints, script/style sources) are always parallel.
 
 ```gox
 <input (doors.AInput{
-    Race: doors.RaceStrict,
+    Race: doors.RaceLatest,
     On: func(ctx context.Context, r doors.RequestInput) bool { return false },
 })/>
 ```

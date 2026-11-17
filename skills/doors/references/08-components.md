@@ -21,7 +21,7 @@ elem (c counter) Main() {
         },
     })>Add</button>
 
-    ~(c.state.Bind(c.count))   // ← only this fragment rerenders
+    ~(c.state.Bind(c.count))   ~// ← only this fragment rerenders
 }
 
 elem (c counter) count(i int) {

@@ -28,13 +28,13 @@ func (c Classes) String() string                      // rendered class string
 ### Usage Forms
 
 ```gox
-// As attribute value
+~// As attribute value
 <div class=(card)>...</div>
 
-// As attribute modifier
+~// As attribute modifier
 <div class="p-4" (doors.Class("rounded-lg"))>...</div>
 
-// As element proxy
+~// As element proxy
 ~>(doors.Class("h-5 w-5")) ~(Icon())
 ```
 
@@ -82,7 +82,7 @@ doors.ResourceString(appCSS)
 doors.ResourceExternal("https://cdn.example.com/app.css") // direct external URL
 ```
 
-Shorthand: `href=(appCSS)` where `appCSS` is `[]byte` is equivalent to `href=(doors.ResourceBytes(appCSS))`. Same for handler functions.
+Shorthand: `href=(appCSS)` where `appCSS` is `[]byte` is equivalent to `(doors.ResourceBytes(appCSS))`. Same for handler functions.
 
 For full resource behavior (caching, content type, name, private/nocache/portable), see [resources.md](./14-resources.md).
 
@@ -90,13 +90,19 @@ For full resource behavior (caching, content type, name, private/nocache/portabl
 
 | Attr | Effect |
 |------|--------|
-| `raw` | Keep literal `<style>` tag or raw link |
+| `raw` | `<style>`: keep the literal tag; linked stylesheet: still served by Doors, unminified |
 | `name="..."` | Readable output filename |
 | `private` | Instance-scoped URL |
 | `nocache` | No shared resource caching (for dynamically generated styles) |
 | `portable` | Hook URL with its own access, loads without the session cookie; acts as `private` unless `nocache`; not with `cache` |
 
 `name`, `private`, `nocache`, and `portable` also work on managed `<style>...</style>` tags; `raw` keeps the literal style tag instead of turning it into a stylesheet resource.
+
+Chain equivalents (`StyleResource`, see `14-resources.md` Two Syntaxes): `.Style()` then `.Name(n)`, `.Raw()`, `.Private()`, `.NoCache()`, `.Portable()`:
+```gox
+<link rel="stylesheet" (doors.ResourceBytes(appCSS).Style().Private())>
+```
+A `.ContentType(...)` stage or a `.Script()` stage on a stylesheet link is a render error. JS that adds the link itself gets the URL from a script `data:`: `<script data:css=(doors.ResourceBytes(appCSS).Style())>` then `$data("css")`; Go code needing the string: `doors.ResourceBytes(appCSS).Style().URL(ctx)`. A plain source there is an asset, so always go through `.Style()`.
 
 ## Framework CSS
 

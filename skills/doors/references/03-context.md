@@ -57,7 +57,7 @@ Renders the following element with the **values** of `ctx` — propagates user `
 
 ```gox
 ~>(doors.Ctx(context.WithValue(ctx, themeKey{}, "dark"))) <>
-    // subtree sees ctx.Value(themeKey{})
+    ~// subtree sees ctx.Value(themeKey{})
 </>
 ```
 
@@ -251,7 +251,7 @@ Starting point: handler/render ctx
 4. **Using `SessionContext` for `Call`, `Router`, `A(ctx, ...)`, or `InstanceStore`** — these need an instance core.
 5. **Waiting on completion channels during render or in beam subscriptions** — deadlock or undefined behavior; a non-detached ctx never delivers a result anyway (channel closes after the scheduled value, `Into` dst unwritten). Ignore the channel, or wait for the second value in a goroutine of your own with `DetachedContext(ctx)` / in `doors.Go`.
 6. **Using HTTP request context for instance-level Doors APIs** — panics. `r.Context()` carries session-level values, not instance-level. Just use the `ctx` provided directly.
-7. **Requesting Doors actions from an already-canceled context** (typically one kept by a goroutine that outlived its owner) — logs the warning `requested action from a canceled context` with `action` and `caller` attributes. `caller` is the file:line of the first frame outside Doors, with generated templates resolved to their `.gox` source — start debugging there. Use `InstanceContext(ctx)` or `SessionContext(ctx)` for long-running goroutines and awaited operations.
+7. **Requesting Doors actions from an already-canceled context** (typically one kept by a goroutine that outlived its owner) — logs `requested action from a canceled context` at debug level with `action` and `caller` attributes. `caller` is the file:line of the first frame outside Doors, with generated templates resolved to their `.gox` source — start debugging there. Use `InstanceContext(ctx)` or `SessionContext(ctx)` for long-running goroutines and awaited operations.
 8. **Reading one value from a completion channel and using the `Into` destination** — the first value only means scheduled. Read the second value, on a detached ctx.
 
 ## Related
